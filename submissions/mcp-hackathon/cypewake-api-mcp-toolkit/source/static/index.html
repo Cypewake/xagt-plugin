@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en-CN">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>MCPForge · API→MCP 全链路工厂</title>
+<title>MCPForge · API-to-MCP Factory</title>
 <style>
   :root{
     --bg:#0b0f17; --panel:#131a26; --panel-2:#0f1620; --line:#22304a;
@@ -78,15 +78,15 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>MCP<span>Forge</span> · API→MCP 全链路工厂</h1>
+      <h1>MCP<span>Forge</span> · API-to-MCP Factory</h1>
       <div class="tagline">
-        把任意 OpenAPI 描述的 REST API 转换成 Agent 可直接调用的 MCP 能力 —— 严格走完
+        Turn any REST API described by OpenAPI into MCP tools an agent can call — running the full
         <b>Build → Verify → MCPize → Monetize</b>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
-      <div class="badge"><span class="dot" id="hdot"></span><span id="htxt">检查中…</span></div>
-      <div class="badge">MCP 端点 <code>/mcp</code></div>
+      <div class="badge"><span class="dot" id="hdot"></span><span id="htxt">Checking…</span></div>
+      <div class="badge">MCP endpoint <code>/mcp</code></div>
     </div>
   </header>
 
@@ -98,76 +98,76 @@
       <option value="pro">pro</option>
       <option value="enterprise">enterprise</option>
     </select>
-    <button class="primary" id="runall">一键跑完整流水线</button>
-    <button class="run" id="previewscope">预览策展</button>
+    <button class="primary" id="runall">Run full pipeline</button>
+    <button class="run" id="previewscope">Preview curation</button>
   </div>
   <section class="panel" style="margin-top:14px">
-    <h3>工具策展（Tool Curation）</h3>
+    <h3>Tool Curation</h3>
     <div class="hint">
-      解决「100 个端点导出 100 个工具、撑爆 Agent 上下文」的问题。在生成前按 tag / 方法 / 路径 / 意图过滤。
-      留空则导出全部。
+      Fixes the 100-endpoints-to-100-tools blowup that floods the agent context window. Filter by tag, method, path, or intent before generating.
+      Leave empty to export everything.
     </div>
     <textarea id="scope" style="width:100%;min-height:90px;background:var(--panel-2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:11px;font-family:var(--mono);font-size:12px;margin-top:10px" spellcheck="false" placeholder='{"include_tags":["pet"],"include_methods":["GET"],"exclude_deprecated":true}'></textarea>
     <div class="hint" style="margin-top:8px">
-      示例：<code>{"intent":"user order","top_n":5}</code> 按语义取最相关的 5 个操作；
-      <code>{"include_path_patterns":["/pet/*"],"exclude_methods":["DELETE"]}</code> 只保留 /pet 下非删除操作。
+      Example: <code>{"intent":"user order","top_n":5}</code> takes the 5 most relevant operations by semantics;
+      <code>{"include_path_patterns":["/pet/*"],"exclude_methods":["DELETE"]}</code> keeps only non-DELETE operations under /pet.
     </div>
   </section>
   <div class="hint">
-    默认使用公开免密钥的 Swagger Petstore。也可换成任意 OpenAPI/Swagger 的 URL、本地文件路径或直接粘贴文本。
+    Defaults to the public keyless Swagger Petstore. Swap in any OpenAPI/Swagger URL, local file path, or pasted text.
   </div>
 
   <div class="grid">
     <div class="card s-build">
-      <h2><span class="pill">BUILD</span>解析与抽取</h2>
-      <div class="why">读 spec，展开 <code>$ref</code>、合并 path 级参数、识别鉴权方案与分页参数，产出带 JSON Schema 的操作清单。</div>
-      <div class="acts"><button class="run" data-stage="build">运行 BUILD</button><span class="status" id="st-build"></span></div>
+      <h2><span class="pill">BUILD</span>Parse and extract</h2>
+      <div class="why">Reads the spec: expands <code>$ref</code>, merges path-level parameters, detects auth schemes and pagination, and emits an operation list with JSON Schema.</div>
+      <div class="acts"><button class="run" data-stage="build">Run BUILD</button><span class="status" id="st-build"></span></div>
       <div class="out" id="out-build"></div>
     </div>
 
     <div class="card s-verify">
-      <h2><span class="pill">VERIFY</span>真实验证</h2>
-      <div class="why">并发真实调用端点，只把 HTTP 2xx 记为通过；401/403 记为需鉴权，4xx 记为参数错误，网络失败记为不可达。</div>
-      <div class="acts"><button class="run" data-stage="verify">运行 VERIFY</button><span class="status" id="st-verify"></span></div>
+      <h2><span class="pill">VERIFY</span>Real verification</h2>
+      <div class="why">Calls every endpoint for real, concurrently. Only HTTP 2xx counts as a pass; 401/403 means auth required, other 4xx means bad parameters, network failure means unreachable.</div>
+      <div class="acts"><button class="run" data-stage="verify">Run VERIFY</button><span class="status" id="st-verify"></span></div>
       <div class="out" id="out-verify"></div>
     </div>
 
     <div class="card s-mcpize">
-      <h2><span class="pill">MCPIZE</span>生成可部署包</h2>
-      <div class="why">把整份 spec 生成为完整可部署的 MCP 服务包（server.py + 依赖 + 说明 + 清单），落盘即成品。</div>
-      <div class="acts"><button class="run" data-stage="mcpize">运行 MCPIZE</button><span class="status" id="st-mcpize"></span></div>
+      <h2><span class="pill">MCPIZE</span>Generate deployable bundle</h2>
+      <div class="why">Turns the whole spec into a deployable MCP server package (server.py + dependencies + README + manifest). What lands on disk is the finished artifact.</div>
+      <div class="acts"><button class="run" data-stage="mcpize">Run MCPIZE</button><span class="status" id="st-mcpize"></span></div>
       <div class="out" id="out-mcpize"></div>
     </div>
 
     <div class="card s-money">
-      <h2><span class="pill">MONETIZE</span>计量与出账</h2>
-      <div class="why">生成上架清单（含工具级 schema 与计费档位），并基于真实调用计量出账 —— 不是打印一张拍脑袋的价目表。</div>
-      <div class="acts"><button class="run" data-stage="monetize">运行 MONETIZE</button><span class="status" id="st-monetize"></span></div>
+      <h2><span class="pill">MONETIZE</span>Meter and bill</h2>
+      <div class="why">Builds the listing payload (per-tool schema plus pricing tiers) and bills from real metered calls — not a hand-waved price table.</div>
+      <div class="acts"><button class="run" data-stage="monetize">Run MONETIZE</button><span class="status" id="st-monetize"></span></div>
       <div class="out" id="out-monetize"></div>
     </div>
   </div>
 
   <section class="panel">
-    <h3>用量与账单</h3>
-    <div class="hint">数据来自本服务每次调用时的真实计量（<code>usage.json</code>）。</div>
+    <h3>Usage and invoices</h3>
+    <div class="hint">Metered on every real call through this service (<code>usage.json</code>).</div>
     <div class="kv" id="usage"></div>
     <div class="acts" style="margin-top:14px">
-      <button class="run" id="invoice">按 10 万次调用出账</button>
+      <button class="run" id="invoice">Bill at 100k calls</button>
       <span class="status" id="st-invoice"></span>
     </div>
     <div class="out" id="out-invoice"></div>
   </section>
 
   <section class="panel">
-    <h3>真实任务演示 · 技术选型简报</h3>
+    <h3>Real task · technology selection brief</h3>
     <div class="hint">
-      评审最关心的是「能不能替 agent 干成一件真事」。这里不是单步探针，而是三步编排：
-      <b>检索候选 → 逐个核实 → 聚合简报</b>。数值来自 GitHub 实时 API，
-      <b>纯 prompt 凭记忆给不出</b>。失败也如实展示（限流 / 404 不粉饰）。
+      Reviewers care whether the tools finish a real job for an agent. This is a three-step chain, not a single probe:
+      <b>search → verify each candidate → aggregate the brief</b>. Numbers come from the live GitHub API, so
+      <b>a prompt answering from memory gets them wrong</b>. Failures show as they are — rate limits and 404s stay visible.
     </div>
     <div class="acts" style="margin-top:14px">
       <input type="text" id="topic" value="model-context-protocol" />
-      <button class="primary" id="runrealtask">运行真实任务</button>
+      <button class="primary" id="runrealtask">Run real task</button>
       <span class="status" id="st-realtask"></span>
     </div>
     <div id="realtask-brief"></div>
@@ -175,9 +175,9 @@
   </section>
 
   <footer>
-    MCPForge · X-Agent AI MCP Hackathon 2026 · 开放创新赛道（Open Innovation）<br />
-    本作品是通用 API/MCP 工程能力，不含漏洞检测、风险评分、安全监控等任何安全/审计/链上安全外壳。
-    健康检查：<a href="/api/health">/api/health</a> ｜ MCP 端点：<code>/mcp</code>
+    MCPForge · X-Agent AI MCP Hackathon 2026 · Open Innovation track<br />
+    Generic API and MCP engineering. No vulnerability detection, risk scoring, security monitoring, or any security/audit/on-chain surface.
+    Health check: <a href="/api/health">/api/health</a> | MCP endpoint: <code>/mcp</code>
   </footer>
 </div>
 
@@ -189,7 +189,7 @@ function scopeValue() {
   const raw = $('scope').value.trim();
   if (!raw) return null;
   try { return JSON.parse(raw); }
-  catch (e) { throw new Error('scope 不是合法 JSON：' + e.message); }
+  catch (e) { throw new Error('scope is not valid JSON: ' + e.message); }
 }
 
 function show(id, obj) {
@@ -215,39 +215,39 @@ async function health() {
   try {
     const h = await (await fetch('/api/health')).json();
     $('hdot').className = 'dot ' + (h.status === 'ok' ? 'ok' : 'bad');
-    $('htxt').textContent = '在线 · v' + h.version + ' · 已注册 ' + h.registered_apis.length + ' 个 API';
+    $('htxt').textContent = 'Online · v' + h.version + ' · registered ' + h.registered_apis.length + '  APIs';
   } catch (e) {
     $('hdot').className = 'dot bad';
-    $('htxt').textContent = '不可达';
+    $('htxt').textContent = 'Unreachable';
   }
 }
 
 const stages = {
   async build() {
     const d = await post('/api/build', { spec_source: specValue() });
-    stat('build', d.operation_count + ' 个操作 · 鉴权 ' + d.auth_schemes.length + ' 项', 'ok');
+    stat('build', d.operation_count + '  operations · ' + d.auth_schemes.length + ' auth schemes', 'ok');
     show('build', {
-      标题: d.title, 版本: d.version, base_url: d.base_url,
-      鉴权方案: d.auth_schemes.map(s => s.name + '(' + s.type + ')'),
-      操作总数: d.operation_count,
-      前5个操作: d.operations.slice(0, 5).map(o =>
+      title: d.title, version: d.version, base_url: d.base_url,
+      auth_schemes: d.auth_schemes.map(s => s.name + '(' + s.type + ')'),
+      operation_count: d.operation_count,
+      top_5_operations: d.operations.slice(0, 5).map(o =>
         o.method + ' ' + o.path + ' → ' + o.operation_id +
-        (o.requires_auth ? ' [需鉴权]' : '') + (o.paginated ? ' [分页]' : ''))
+        (o.requires_auth ? ' [auth required]' : '') + (o.paginated ? ' [paginated]' : ''))
     });
   },
   async verify() {
     const d = await post('/api/verify', { spec_source: specValue(), max_ops: 12, scope: scopeValue() });
     const reduction = d.filtered_operations && d.total_operations
-      ? '（策展后 ' + d.filtered_operations + ' / 原 ' + d.total_operations + '）' : '';
-    stat('verify', '通过 ' + d.passed + ' / 验证 ' + d.verified + reduction, d.passed > 0 ? 'ok' : 'warn');
+      ? ' (curated ' + d.filtered_operations + ' / original ' + d.total_operations + ')' : '';
+    stat('verify', 'Passed ' + d.passed + ' / verified ' + d.verified + reduction, d.passed > 0 ? 'ok' : 'warn');
     show('verify', {
-      结论: d.verdict,
-      原始操作数: d.total_operations,
-      策展后操作数: d.filtered_operations,
-      通过_2xx: d.passed,
-      已触达但未通过: d.reached_but_failed,
-      不可达: d.unreachable,
-      逐条: d.results.map(r =>
+      verdict: d.verdict,
+      original_operations: d.total_operations,
+      curated_operations: d.filtered_operations,
+      passed_2xx: d.passed,
+      reached_but_failed: d.reached_but_failed,
+      unreachable: d.unreachable,
+      items: d.results.map(r =>
         r.method + ' ' + r.operation_id + ' → ' + r.status +
         ' (HTTP ' + r.http_status + ', ' + r.latency_ms + 'ms)')
     });
@@ -255,24 +255,24 @@ const stages = {
   async mcpize() {
     const d = await post('/api/mcpize', { spec_source: specValue(), name: 'petstore-mcp', scope: scopeValue() });
     const reduction = d.original_operations
-      ? '（' + d.tools + ' / 原 ' + d.original_operations + '，减 ' + Math.round((1 - d.tools/d.original_operations)*100) + '%）'
-      : '（' + d.tools + ' 个）';
-    stat('mcpize', d.tools + ' 个工具已生成' + reduction, 'ok');
+      ? ' (' + d.tools + ' / original ' + d.original_operations + ', -' + Math.round((1 - d.tools/d.original_operations)*100) + '%)'
+      : ' (' + d.tools + '  )';
+    stat('mcpize', d.tools + '  tools generated' + reduction, 'ok');
     show('mcpize', d);
   },
   async monetize() {
     const name = (specValue().split('/').filter(Boolean).pop() || 'petstore').replace(/\..*$/, '');
     const manifest = await post('/api/monetize', { spec_source: specValue(), name, pricing_tier: $('tier').value, scope: scopeValue() });
     await post('/api/register', { name, spec_source: specValue() }).catch(() => {});
-    stat('monetize', '档位 ' + manifest.pricing.tier + ' · ' + manifest.pricing.price_per_1k_calls + '/千次', 'ok');
+    stat('monetize', 'Tier ' + manifest.pricing.tier + ' · ' + manifest.pricing.price_per_1k_calls + '/1k', 'ok');
     show('monetize', {
-      名称: manifest.listing.display_name,
-      分类: manifest.listing.category,
-      工具数: manifest.listing.capabilities.tool_count,
-      需鉴权: manifest.listing.auth.required,
-      鉴权方案: manifest.listing.auth.schemes.map(s => s.name),
-      计费: manifest.pricing,
-      首个工具schema: manifest.tools[0] && manifest.tools[0].input_schema
+      name: manifest.listing.display_name,
+      category: manifest.listing.category,
+      tool_count: manifest.listing.capabilities.tool_count,
+      auth_required: manifest.listing.auth.required,
+      auth_schemes: manifest.listing.auth.schemes.map(s => s.name),
+      pricing: manifest.pricing,
+      first_tool_schema: manifest.tools[0] && manifest.tools[0].input_schema
     });
   }
 };
@@ -281,9 +281,9 @@ document.querySelectorAll('button.run[data-stage]').forEach(btn => {
   btn.addEventListener('click', async () => {
     const s = btn.dataset.stage;
     btn.disabled = true;
-    stat(s, '运行中…', 'warn');
+    stat(s, 'Running…', 'warn');
     try { await stages[s](); }
-    catch (e) { stat(s, '失败：' + e.message, 'bad'); show(s, String(e)); }
+    catch (e) { stat(s, 'Failed: ' + e.message, 'bad'); show(s, String(e)); }
     finally { btn.disabled = false; await health(); }
   });
 });
@@ -291,26 +291,26 @@ document.querySelectorAll('button.run[data-stage]').forEach(btn => {
 $('runall').addEventListener('click', async () => {
   const btn = $('runall');
   btn.disabled = true;
-  btn.textContent = '流水线运行中…';
+  btn.textContent = 'Pipeline running…';
   try {
     const d = await post('/api/full-pipeline', { spec_source: specValue(), pricing_tier: $('tier').value, scope: scopeValue() });
     show('build', d.build);
-    stat('build', d.build.operation_count + ' 个操作', 'ok');
+    stat('build', d.build.operation_count + '  operations', 'ok');
     show('verify', d.verify);
-    stat('verify', '通过 ' + d.verify.passed + ' / 验证 ' + d.verify.verified, d.verify.passed > 0 ? 'ok' : 'warn');
+    stat('verify', 'Passed ' + d.verify.passed + ' / verified ' + d.verify.verified, d.verify.passed > 0 ? 'ok' : 'warn');
     show('mcpize', d.mcpize);
     const reduction = d.mcpize.original_operations
-      ? '（' + d.mcpize.tools + ' / 原 ' + d.mcpize.original_operations + '，减 ' + Math.round((1 - d.mcpize.tools/d.mcpize.original_operations)*100) + '%）'
+      ? ' (' + d.mcpize.tools + ' / original ' + d.mcpize.original_operations + ', -' + Math.round((1 - d.mcpize.tools/d.mcpize.original_operations)*100) + '%)'
       : '';
-    stat('mcpize', d.mcpize.tools + ' 个工具' + reduction, 'ok');
-    show('monetize', { 注册: d.register, 真实调用: d.call, 上架: d.monetize, 账单预览: d.invoice_preview });
-    stat('monetize', '应付 ' + d.invoice_preview.amount_due + ' ' + d.invoice_preview.currency, 'ok');
+    stat('mcpize', d.mcpize.tools + '  tools' + reduction, 'ok');
+    show('monetize', { register: d.register, real_call: d.call, listing: d.monetize, invoice_preview: d.invoice_preview });
+    stat('monetize', 'Due ' + d.invoice_preview.amount_due + ' ' + d.invoice_preview.currency, 'ok');
     await loadUsage();
   } catch (e) {
-    alert('流水线失败：' + e.message);
+    alert('Pipeline failed: ' + e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = '一键跑完整流水线';
+    btn.textContent = 'Run full pipeline';
     await health();
   }
 });
@@ -321,12 +321,12 @@ $('previewscope').addEventListener('click', async () => {
   try {
     const d = await post('/api/preview-scope', { spec_source: specValue(), scope: scopeValue() });
     show('build', {
-      策展预览: d,
-      说明: 'kept_operations 为过滤后保留的操作；suggestions 为系统推荐的 tags / methods / 路径前缀。'
+      curation_preview: d,
+      note: 'kept_operations lists what survives the filter; suggestions are the recommended tags / methods / path prefixes.'
     });
-    stat('build', '原始 ' + d.total_operations + ' → 策展后 ' + d.filtered_operations + '（减 ' + d.reduction_percent + '%）', 'ok');
+    stat('build', 'Original ' + d.total_operations + ' → curated ' + d.filtered_operations + ' (-' + d.reduction_percent + '%)', 'ok');
   } catch (e) {
-    stat('build', '预览失败：' + e.message, 'bad');
+    stat('build', 'Preview failed: ' + e.message, 'bad');
   } finally {
     btn.disabled = false;
   }
@@ -338,34 +338,34 @@ async function loadUsage() {
   const names = Object.keys(apis);
   const first = names.length ? apis[names[0]] : null;
   $('usage').innerHTML =
-    '<div><div class="k">累计调用</div><div class="v">' + (u.total_calls_all_apis || 0) + '</div></div>' +
-    '<div><div class="k">已注册 API</div><div class="v">' + names.length + '</div></div>' +
-    '<div><div class="k">成功率</div><div class="v">' + (first ? ((first.success_rate ?? 0) * 100).toFixed(0) + '%' : '—') + '</div></div>' +
-    '<div><div class="k">日均调用</div><div class="v">' + (first ? first.calls_per_day : '—') + '</div></div>';
+    '<div><div class="k">Total calls</div><div class="v">' + (u.total_calls_all_apis || 0) + '</div></div>' +
+    '<div><div class="k">Registered APIs</div><div class="v">' + names.length + '</div></div>' +
+    '<div><div class="k">Success rate</div><div class="v">' + (first ? ((first.success_rate ?? 0) * 100).toFixed(0) + '%' : '—') + '</div></div>' +
+    '<div><div class="k">Daily average</div><div class="v">' + (first ? first.calls_per_day : '—') + '</div></div>';
 }
 
 $('invoice').addEventListener('click', async () => {
   const btn = $('invoice');
   btn.disabled = true;
-  stat('invoice', '出账中…', 'warn');
+  stat('invoice', 'Billing…', 'warn');
   try {
     const u = await (await fetch('/api/usage')).json();
     const names = Object.keys(u.apis || {});
-    if (!names.length) { stat('invoice', '还没有任何调用，先跑一次流水线', 'bad'); return; }
+    if (!names.length) { stat('invoice', 'No calls yet — run the pipeline first', 'bad'); return; }
     const inv = await post('/api/invoice', {
       api_name: names[0], pricing_tier: $('tier').value, projected_calls: 100000
     });
-    stat('invoice', '应付 ' + inv.amount_due + ' ' + inv.currency, 'ok');
+    stat('invoice', 'Due ' + inv.amount_due + ' ' + inv.currency, 'ok');
     show('invoice', inv);
-  } catch (e) { stat('invoice', '失败：' + e.message, 'bad'); }
+  } catch (e) { stat('invoice', 'Failed: ' + e.message, 'bad'); }
   finally { btn.disabled = false; }
 });
 
 $('runrealtask').addEventListener('click', async () => {
   const btn = $('runrealtask');
   btn.disabled = true;
-  btn.textContent = '任务运行中…';
-  stat('realtask', '运行中…', 'warn');
+  btn.textContent = 'Task running…';
+  stat('realtask', 'Running…', 'warn');
   try {
     const d = await post('/api/real-task', {
       topic: ($('topic').value.trim() || 'model-context-protocol'), top_n: 3
@@ -375,27 +375,27 @@ $('runrealtask').addEventListener('click', async () => {
       ? '<div class="rank">' + rank.map((v, i) =>
           '<div class="item"><div class="name">#' + (i + 1) + ' ' + (v.full_name || '—') + '</div>' +
           '<div class="m">★ <b>' + (v.stars ?? '—') + '</b> · forks ' + (v.forks ?? '—') +
-          ' · issues ' + (v.open_issues ?? '—') + '<br>语言 ' + (v.language || '—') +
-          ' · 更新 ' + ((v.pushed_at || '').slice(0, 10) || '—') + '</div></div>'
+          ' · issues ' + (v.open_issues ?? '—') + '<br>Language ' + (v.language || '—') +
+          ' · updated ' + ((v.pushed_at || '').slice(0, 10) || '—') + '</div></div>'
         ).join('') + '</div>'
       : '';
     const b = d.billing || {};
     const live = d.source === 'live';
-    stat('realtask', (d.steps || []).length + ' 步完成 · 规模化 100 万次/月 ≈ ' +
+    stat('realtask', (d.steps || []).length + '  steps done · at 1M calls/month ≈ ' +
       ((b.invoice_scaled_1m || {}).amount_due ?? '—') + ' USD · ' +
-      (live ? '实时调用' : '离线证据快照'), live ? 'ok' : 'warn');
+      (live ? 'live calls' : 'offline evidence snapshot'), live ? 'ok' : 'warn');
     if (!live && d.degraded_reason) {
       $('realtask-brief').insertAdjacentHTML('beforeend',
-        '<div class="hint" style="color:var(--warn)">线上环境出网受限，已回退到真实证据快照：' +
+        '<div class="hint" style="color:var(--warn)">Outbound access is restricted on this host; fell back to the recorded evidence snapshot: ' +
         d.degraded_reason + '</div>');
     }
     show('realtask', d);
   } catch (e) {
-    stat('realtask', '失败：' + e.message, 'bad');
+    stat('realtask', 'Failed: ' + e.message, 'bad');
     show('realtask', String(e));
   } finally {
     btn.disabled = false;
-    btn.textContent = '运行真实任务';
+    btn.textContent = 'Run real task';
   }
 });
 

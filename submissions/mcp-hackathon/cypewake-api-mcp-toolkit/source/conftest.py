@@ -1,4 +1,4 @@
-"""pytest 根 conftest：确保项目根目录在 sys.path 上，使 tests/ 能 import core / server。"""
+"""Root pytest conftest: keep the project root on sys.path so tests/ can import core and server."""
 
 import sys
 from pathlib import Path

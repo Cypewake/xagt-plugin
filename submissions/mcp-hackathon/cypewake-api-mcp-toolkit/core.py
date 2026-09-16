@@ -1,20 +1,20 @@
 """
-core.py · MCPForge 核心逻辑 v2（与传输层解耦，server.py / demo_app.py / verify.py 共用）
+core.py · MCPForge core logic v2 (transport-agnostic, shared by server.py / demo_app.py / verify.py)
 
-v2 相对 v1 的实质变更（每一条都对应一次对抗式复核发现）：
-- [修复] 粘贴的 OpenAPI 文本不再被误判为文件路径（v1 会抛 FileNotFoundError）。
-- [修复] IO 全部改为 async，不再用同步 httpx 阻塞事件循环。
-- [修复] VERIFY 不再「任何响应都算可达」：区分 2xx 通过 / 鉴权失败 / 参数错误 / 不可达。
-- [修复] 代码生成不再把原始路径缝进 f-string（v1 对 {account-id} 这类占位符会产出 NameError）。
-- [修复] 代码生成的 docstring 做转义，避免 spec 里的三引号把生成文件弄成 SyntaxError。
-- [修复] 生成物落盘做目录穿越防护；本地文件读取限定在允许根内。
-- [修复] 出网做 SSRF 防护（默认拒绝回环/内网/链路本地地址）。
-- [修复] 注册表原子写入，损坏文件留档而非静默清空。
-- [新增] $ref 展开、path 级 parameters 合并、鉴权方案识别、分页参数识别。
-- [新增] 每次调用写入真实用量计量（供 MONETIZE 出账）。
+Material changes in v2 over v1 (each traces to an adversarial review finding):
+- [fix] Pasted OpenAPI text is no longer misclassified as a file path (v1 raised FileNotFoundError).
+- [fix] All IO is async; synchronous httpx no longer blocks the event loop.
+- [fix] VERIFY no longer treats any response as reachable: 2xx passes, and auth failure, bad parameters, and unreachable are distinct.
+- [fix] Code generation no longer splices raw paths into f-strings (v1 produced NameError for placeholders like {account-id}).
+- [fix] Generated docstrings are escaped, so a triple quote in the spec cannot turn the output into a SyntaxError.
+- [fix] Output paths are guarded against traversal; local reads stay inside allowed roots.
+- [fix] Outbound requests carry SSRF protection (loopback, private, and link-local refused by default).
+- [fix] The registry writes atomically; a corrupt file is kept aside rather than silently cleared.
+- [new] $ref expansion, path-level parameter merging, auth scheme detection, pagination detection.
+- [new] Every call records real usage metering (feeding MONETIZE invoices).
 
-本模块不依赖 FastMCP，可独立单测。
-合规：纯 API/MCP 工程能力，不含任何安全/审计/链上安全外壳。
+This module does not depend on FastMCP and unit tests on its own.
+Compliance: pure API/MCP engineering. No security, audit, or on-chain surface.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ USER_AGENT = f"MCPForge/{VERSION}"
 HTTP_METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
 DEFAULT_TIMEOUT = 20.0
 
-# 分页参数启发式（用于在 BUILD 阶段提示调用方如何翻页）
+# Pagination heuristics (used at BUILD to hint how callers should page)
 _PAGINATION_HINTS = {
     "limit", "offset", "page", "page_size", "pagesize", "per_page", "perpage",
     "cursor", "skip", "start", "count", "size", "next",
@@ -50,25 +50,25 @@ _PAGINATION_HINTS = {
 
 
 class SpecSourceError(ValueError):
-    """spec 来源无法解析（URL 取不到 / 文件不存在 / 文本不是合法 spec）。"""
+    """A spec source could not be resolved (URL unreachable / file missing / text is not a valid spec)."""
 
 
 class PathNotAllowed(PermissionError):
-    """路径越出安全边界。"""
+    """A path escaped the security boundary."""
 
 
 # --------------------------------------------------------------------------- #
-# 安全边界：读取根、写入根、出网白名单
+# Security boundaries: read roots, write roots, outbound allowlist
 # --------------------------------------------------------------------------- #
 def _read_roots() -> list[Path]:
-    """允许读取本地 spec 的根目录。默认当前工作目录，可用 MCPFORGE_READ_ROOTS 覆盖（os.pathsep 分隔）。"""
+    """Roots allowed for reading local specs. Defaults to the working directory; override with MCPFORGE_READ_ROOTS (os.pathsep-separated)."""
     env = os.getenv("MCPFORGE_READ_ROOTS", "")
     roots = [Path(p).expanduser().resolve() for p in env.split(os.pathsep) if p.strip()]
     return roots or [Path.cwd().resolve()]
 
 
 def ensure_readable(path_str: str) -> Path:
-    """把用户给的本地路径限定在允许根内，防止把工具面变成任意文件读取原语。"""
+    """Confine a user-supplied local path to the allowed roots, so the tool surface never becomes an arbitrary file read primitive."""
     p = Path(path_str).expanduser()
     if not p.is_absolute():
         p = Path.cwd() / p
@@ -79,8 +79,8 @@ def ensure_readable(path_str: str) -> Path:
         if p == root or root in p.parents:
             return p
     raise PathNotAllowed(
-        f"拒绝读取 {p}：超出允许目录 {[str(r) for r in _read_roots()]}。"
-        "如需放宽，设置环境变量 MCPFORGE_ALLOW_ANY_PATH=1 或 MCPFORGE_READ_ROOTS。"
+        f"refusing to read {p}: outside the allowed directories {[str(r) for r in _read_roots()]}. "
+        "Set MCPFORGE_ALLOW_ANY_PATH=1 or MCPFORGE_READ_ROOTS to relax this."
     )
 
 
@@ -88,10 +88,10 @@ _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
 def ensure_writable_dir(root: str, name: str) -> Path:
-    """生成物落盘路径：名称白名单 + 结果必须位于 root 之内，拒绝目录穿越。"""
+    """Output path for generated artifacts: a name allowlist plus a check that the result sits inside root, so traversal is refused."""
     if not _SAFE_NAME_RE.match(name or ""):
         raise PathNotAllowed(
-            f"名称 {name!r} 不合法：仅允许字母/数字/._-，须以字母或数字开头，长度 1-64。"
+            f"invalid name {name!r}: only letters/digits/._- allowed, must start with a letter or digit, length 1-64."
         )
     root_p = Path(root).expanduser()
     if not root_p.is_absolute():
@@ -99,31 +99,31 @@ def ensure_writable_dir(root: str, name: str) -> Path:
     root_p = root_p.resolve()
     target = (root_p / name).resolve()
     if target != root_p and root_p not in target.parents:
-        raise PathNotAllowed(f"输出目录 {target} 越出允许根 {root_p}，已拒绝。")
+        raise PathNotAllowed(f"output directory {target} escapes the allowed root {root_p}; refused.")
     return target
 
 
 def assert_public_url(url: str) -> None:
-    """出网前的 SSRF 防护：默认拒绝回环/内网/链路本地/保留地址。
+    """SSRF guard applied before any outbound request: refuses loopback, private, link-local, and reserved addresses.
 
-    这不是完备防护（不防 DNS rebinding），但能挡掉云元数据端点与内网探测这两类最常见的滥用。
-    本地联调可设 MCPFORGE_ALLOW_PRIVATE_NET=1 放行。
+    This is not complete protection (it does not stop DNS rebinding), but it blocks the two most common abuses:
+    cloud metadata endpoints and internal network probing. Set MCPFORGE_ALLOW_PRIVATE_NET=1 for local debugging.
     """
     if os.getenv("MCPFORGE_ALLOW_PRIVATE_NET", "") == "1":
         return
     p = urllib.parse.urlparse(url)
     if p.scheme not in ("http", "https"):
-        raise ValueError(f"仅支持 http/https，收到 {p.scheme!r}")
+        raise ValueError(f"only http/https supported, got {p.scheme!r}")
     host = p.hostname
     if not host:
-        raise ValueError(f"URL 缺少主机名：{url}")
+        raise ValueError(f"URL is missing a host: {url}")
     if host == "localhost" or host.endswith(".localhost"):
-        raise ValueError(f"拒绝访问本机地址 {host}（如需放行设置 MCPFORGE_ALLOW_PRIVATE_NET=1）")
+        raise ValueError(f"refusing localhost address {host} (set MCPFORGE_ALLOW_PRIVATE_NET=1 to allow it)")
     port = p.port or (443 if p.scheme == "https" else 80)
     try:
         infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror as e:
-        raise ValueError(f"无法解析主机 {host}：{e}") from e
+        raise ValueError(f"cannot resolve host {host}: {e}") from e
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
         if (
@@ -135,8 +135,8 @@ def assert_public_url(url: str) -> None:
             or ip.is_unspecified
         ):
             raise ValueError(
-                f"拒绝访问 {host}：解析到非公网地址 {ip}。"
-                "如需放行本机/内网，设置 MCPFORGE_ALLOW_PRIVATE_NET=1。"
+                f"refusing {host}: resolves to a non-public address {ip}. "
+                "Set MCPFORGE_ALLOW_PRIVATE_NET=1 to allow localhost and private networks."
             )
 
 
@@ -154,15 +154,15 @@ async def request_with_validated_redirects(
     timeout: float = DEFAULT_TIMEOUT,
     max_redirects: int = MAX_REDIRECTS,
 ) -> httpx.Response:
-    """带「逐跳校验」的 HTTP 请求。
+    """HTTP request with per-hop validation.
 
-    为什么不能直接用 httpx 的 follow_redirects=True：它只在初始 URL 上给我们
-    一次校验机会，一个**公网**地址只要 302 到 169.254.169.254 或 127.0.0.1，
-    SSRF 防护就被整体绕过。这一点已实测复现（公开 URL -> 302 -> 本地服务，
-    返回体里读到了内网内容，status_code=200）。
+    Why httpx's follow_redirects=True is not enough: it gives exactly one validation chance, on the initial URL.
+    A **public** address that answers 302 to 169.254.169.254 or 127.0.0.1 walks straight past the SSRF guard.
+    This was reproduced locally (public URL -> 302 -> local service; the response body contained internal content,
+    status_code=200).
 
-    因此这里手动跟跳，**每一跳都重新调用 assert_public_url**，
-    并按 RFC 语义处理 303/302 的方法改写。
+    So redirects are followed manually, calling assert_public_url again on every hop,
+    with the 303/302 method rewrite applied per RFC.
     """
     current_url = url
     current_method = method.upper()
@@ -183,34 +183,34 @@ async def request_with_validated_redirects(
             if resp.status_code not in _REDIRECT_CODES or not location:
                 return resp
             current_url = urllib.parse.urljoin(str(resp.url), location)
-            # 303 一律改 GET；302 对非 GET 按浏览器惯例改 GET
+            # 303 always becomes GET; 302 on non-GET becomes GET by browser convention
             if resp.status_code == 303 or (
                 resp.status_code == 302 and current_method not in ("GET", "HEAD")
             ):
                 current_method = "GET"
                 current_body = None
-            current_params = None  # 参数已并入当前 URL，避免二次拼接
+            current_params = None  # parameters are already merged into the current URL; avoid appending them twice
 
-    raise ValueError(f"重定向超过 {max_redirects} 次，已中止（可能是重定向环）。")
+    raise ValueError(f"aborted after more than {max_redirects} redirects (possible redirect loop).")
 
 
 # --------------------------------------------------------------------------- #
-# BUILD：解析、$ref 展开、operation 抽取
+# BUILD: parsing, $ref expansion, operation extraction
 # --------------------------------------------------------------------------- #
 def _looks_like_path(s: str) -> bool:
     if s.startswith(("./", "../", ".\\", "..\\")):
         return True
     if any(ch in s for ch in ("\n", "\r")):
-        return False  # 多行必然是文本，不是路径
+        return False  # multiple lines means text, not a path
     if s.lower().endswith((".json", ".yaml", ".yml")):
         return True
     return ("/" in s or "\\" in s) and " " not in s.strip() and "{" not in s
 
 
 def parse_spec_text(text: str, source: str = "<text>") -> dict:
-    """把一段文本解析成 spec dict。JSON 优先，回退 YAML。失败时给出可诊断的错误。"""
+    """Parse a chunk of text into a spec dict. JSON first, YAML as fallback, with a diagnostic error on failure."""
     if not text or not text.strip():
-        raise SpecSourceError(f"spec 内容为空（来源：{source}）")
+        raise SpecSourceError(f"spec content is empty (source: {source})")
     spec: Any = None
     err: Optional[Exception] = None
     try:
@@ -221,17 +221,17 @@ def parse_spec_text(text: str, source: str = "<text>") -> dict:
             spec = yaml.safe_load(text)
         except yaml.YAMLError as e2:
             raise SpecSourceError(
-                f"无法把内容解析为 JSON 或 YAML（来源：{source}）。JSON 错误：{e}；YAML 错误：{e2}"
+                f"could not parse the content as JSON or YAML (source: {source}). JSON error: {e}; YAML error: {e2}"
             ) from e2
     if not isinstance(spec, dict):
         raise SpecSourceError(
-            f"内容解析后不是 OpenAPI 对象，而是 {type(spec).__name__}（来源：{source}）。"
-            "请确认传入的是 OpenAPI/Swagger 文档本身。"
+            f"parsed content is not an OpenAPI object but {type(spec).__name__} (source: {source}). "
+            "Make sure you passed the OpenAPI/Swagger document itself."
         )
     if "paths" not in spec and "openapi" not in spec and "swagger" not in spec:
         raise SpecSourceError(
-            f"内容不像 OpenAPI 文档：顶层缺少 paths/openapi/swagger 键（来源：{source}）。"
-            f"实际顶层键：{sorted(spec.keys())[:10]}"
+            f"content does not look like an OpenAPI document: the top level lacks paths/openapi/swagger keys (source: {source}). "
+            f"actual top-level keys: {sorted(spec.keys())[:10]}"
         )
     return spec
 
@@ -252,16 +252,16 @@ def _fetch_text(url: str, timeout: float = DEFAULT_TIMEOUT) -> str:
 
 
 async def load_spec_async(source: str, timeout: float = DEFAULT_TIMEOUT) -> dict:
-    """异步加载 spec。
+    """Load a spec asynchronously.
 
-    来源判定顺序（这是 v1 出 bug 的地方，v2 改为「先试真身，再谈形状」）：
-      1) http(s) URL        -> 拉取
-      2) 存在的本地文件      -> 读取（受允许根约束）
-      3) 其余一律当文本解析  -> 解析失败且形似路径，才报 FileNotFoundError
+    Source resolution order (this is where v1 broke; v2 tries the real thing before guessing the shape):
+      1) http(s) URL             -> fetch it
+      2) an existing local file  -> read it (bounded by the allowed roots)
+      3) anything else is parsed as text; only if parsing fails and it looks like a path do we report FileNotFoundError
     """
     src = (source or "").strip()
     if not src:
-        raise SpecSourceError("spec_source 不能为空")
+        raise SpecSourceError("spec_source must not be empty")
 
     if src.startswith(("http://", "https://")):
         text = await _fetch_text_async(src, timeout)
@@ -275,8 +275,8 @@ async def load_spec_async(source: str, timeout: float = DEFAULT_TIMEOUT) -> dict
         except SpecSourceError as e:
             if _looks_like_path(src):
                 raise FileNotFoundError(
-                    f"本地 spec 文件不存在：{src}（若你本意是粘贴 spec 文本，"
-                    "请确认它是合法的 OpenAPI JSON/YAML）"
+                    f"local spec file does not exist: {src} (if you meant to paste spec text, "
+                    "confirm it is valid OpenAPI JSON/YAML)"
                 ) from e
             raise
 
@@ -286,12 +286,12 @@ async def load_spec_async(source: str, timeout: float = DEFAULT_TIMEOUT) -> dict
 
 
 def load_spec(source: str, timeout: float = DEFAULT_TIMEOUT) -> dict:
-    """同步封装（供脚本与单测使用）。MCP 工具请用 load_spec_async。"""
+    """Synchronous wrapper (for scripts and unit tests). MCP tools should use load_spec_async."""
     return asyncio.run(load_spec_async(source, timeout))
 
 
 def resolve_base_url(spec: dict, source: str = "") -> str:
-    """解析 base_url。正确处理相对 server URL（如 petstore3 的 /api/v3）与缺前导斜杠的情况。"""
+    """Resolve base_url. Handles relative server URLs (such as petstore3's /api/v3) and a missing leading slash."""
     servers = spec.get("servers") or []
     url = ""
     if isinstance(servers, list) and servers and isinstance(servers[0], dict):
@@ -308,7 +308,7 @@ def resolve_base_url(spec: dict, source: str = "") -> str:
         if host:
             return f"{schemes[0]}://{host}{base_path}".rstrip("/")
 
-    # 相对 server URL：用 spec 来源的 origin 补全，并归一化分隔符
+    # Relative server URL: complete it with the origin of the spec source and normalize separators
     if url and source.startswith(("http://", "https://")):
         p = urllib.parse.urlparse(source)
         if not url.startswith("/"):
@@ -324,21 +324,21 @@ def get_base_url(spec: dict) -> str:
 
 
 def resolve_refs(node: Any, root: Optional[dict] = None, _seen: frozenset = frozenset()) -> Any:
-    """就地展开本地 $ref（#/...）。带环保护，遇到自引用时保留原节点不递归。"""
+    """Expand local $ref (#/...) in place. Cycle-safe: a self-referencing node is kept as-is instead of recursing."""
     if root is None:
         root = node
     if isinstance(node, dict):
         ref = node.get("$ref")
         if isinstance(ref, str) and ref.startswith("#/"):
             if ref in _seen:
-                return node  # 环：停止递归
+                return node  # cycle: stop recursing
             target: Any = root
             for part in ref[2:].split("/"):
                 part = part.replace("~1", "/").replace("~0", "~")
                 if isinstance(target, dict) and part in target:
                     target = target[part]
                 else:
-                    return node  # 解不开就原样保留
+                    return node  # keep it verbatim if it cannot be resolved
             merged = resolve_refs(target, root, _seen | {ref})
             if isinstance(merged, dict):
                 extra = {k: resolve_refs(v, root, _seen) for k, v in node.items() if k != "$ref"}
@@ -351,7 +351,7 @@ def resolve_refs(node: Any, root: Optional[dict] = None, _seen: frozenset = froz
 
 
 def detect_auth(spec: dict) -> list[dict]:
-    """识别 spec 声明的鉴权方案（OpenAPI 3 components.securitySchemes / 2.0 securityDefinitions）。"""
+    """Detect auth schemes declared by the spec (OpenAPI 3 components.securitySchemes / 2.0 securityDefinitions)."""
     schemes = (
         (spec.get("components") or {}).get("securitySchemes")
         or spec.get("securityDefinitions")
@@ -382,7 +382,7 @@ def _param_type(schema: Optional[dict]) -> str:
 
 
 def _collect_params(raw_params: list, path_level: list) -> tuple[list, list, list]:
-    """合并 path 级与 operation 级 parameters（后者按 name+in 覆盖前者）。"""
+    """Merge path-level and operation-level parameters (the latter overrides the former by name+in)."""
     merged: dict[tuple, dict] = {}
     for p in list(path_level) + list(raw_params):
         if not isinstance(p, dict) or not p.get("name"):
@@ -399,9 +399,9 @@ def _collect_params(raw_params: list, path_level: list) -> tuple[list, list, lis
             "required": bool(p.get("required", where == "path")),
             "description": p.get("description", ""),
             "pagination_hint": where == "query" and (p.get("name") or "").lower() in _PAGINATION_HINTS,
-            # 透传 spec 声明的样例值：VERIFY 必须用「真实可调用」的值，
-            # 否则 /repos/{owner}/{repo} 会退化成 /repos/sample/sample → 404，
-            # 把可用接口误判成不可用。缺失时保持为 None，交由 _sample_value 回退。
+            # Pass through sample values declared in the spec: VERIFY must call with values that actually work.
+            # Otherwise /repos/{owner}/{repo} degrades to /repos/sample/sample → 404
+            # and a working endpoint is reported as broken. Left as None when absent, falling back to _sample_value.
             "example": sch.get("example", p.get("example")),
             "default": sch.get("default", p.get("default")),
             "enum": sch.get("enum", p.get("enum")),
@@ -416,7 +416,7 @@ def _collect_params(raw_params: list, path_level: list) -> tuple[list, list, lis
 
 
 def extract_operations(spec: dict) -> list[dict]:
-    """从 spec 抽取 operation。会先展开 $ref，并合并 path 级 parameters。"""
+    """Extract operations from a spec. Expands $ref first and merges path-level parameters."""
     resolved = resolve_refs(spec)
     base = get_base_url(resolved)
     ops: list[dict] = []
@@ -452,10 +452,10 @@ def extract_operations(spec: dict) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
-# 工具策展：把 N 个端点聚合成 Agent 能消化的少量工具
+# Tool curation: collapse N endpoints into a small number of tools an agent can absorb
 # --------------------------------------------------------------------------- #
 def _matches_any(text: str, patterns: list[str]) -> bool:
-    """支持通配符 * 的简易匹配（* 匹配任意字符，其余按子串）。"""
+    """Simple wildcard match (* matches anything, everything else is a substring match)."""
     if not patterns:
         return False
     for pat in patterns:
@@ -472,7 +472,7 @@ def _matches_any(text: str, patterns: list[str]) -> bool:
 
 
 def _intent_score(op: dict, intent: str) -> float:
-    """按关键词对 operation 与意图的匹配度打分（用于无规则时的语义排序）。"""
+    """Score how well an operation matches an intent by keyword (used for semantic ordering when no rule applies)."""
     keywords = [k.strip().lower() for k in intent.replace(",", " ").split() if k.strip()]
     if not keywords:
         return 0.0
@@ -485,26 +485,26 @@ def _intent_score(op: dict, intent: str) -> float:
         ]
     ).lower()
     matched = sum(1 for k in keywords if k in haystack)
-    # 命中关键词比例 + 命中密度，让高匹配排在前面
+    # Keyword hit ratio plus hit density, so strong matches sort first
     return matched / len(keywords) + matched * 0.05
 
 
 def filter_operations(ops: list[dict], scope: Optional[dict] = None) -> list[dict]:
-    """按 scope 规则过滤并排序 operation，解决「工具爆炸」问题。
+    """Filter and order operations by scope rules, which is the fix for tool explosion.
 
-    scope 字段（均为可选）：
+    scope fields (all optional):
       - include_operation_ids / exclude_operation_ids: list[str]
-      - include_tags / exclude_tags: list[str]（支持 * 通配）
+      - include_tags / exclude_tags: list[str] (supports * wildcards)
       - include_methods / exclude_methods: list[str]
-      - include_path_patterns / exclude_path_patterns: list[str]（支持 * 通配）
-      - intent: str — 语义意图描述，按关键词匹配 summary/path/tags/operation_id
-      - top_n: int — 配合 intent 使用，只取最相关的 N 个
-      - exclude_deprecated: bool — 默认 True，排除 deprecated 操作
+      - include_path_patterns / exclude_path_patterns: list[str] (supports * wildcards)
+      - intent: str — semantic intent, matched by keyword against summary/path/tags/operation_id
+      - top_n: int — used with intent, keeps only the N most relevant
+      - exclude_deprecated: bool — defaults to True, drops deprecated operations
     """
     if not scope:
         return ops
     if not isinstance(scope, dict):
-        raise TypeError("scope 必须是字典")
+        raise TypeError("scope must be a dict")
 
     out = list(ops)
 
@@ -550,7 +550,7 @@ def filter_operations(ops: list[dict], scope: Optional[dict] = None) -> list[dic
         top_n = scope.get("top_n")
         if top_n and int(top_n) > 0:
             scored = scored[: int(top_n)]
-        # 只保留至少命中一个关键词的；如果全没命中，保留原顺序（避免空结果）
+        # keep only operations hitting at least one keyword; if none hit, keep the original order (avoid an empty result)
         if any(s > 0 for _, s in scored):
             out = [o for o, s in scored if s > 0]
         else:
@@ -560,7 +560,7 @@ def filter_operations(ops: list[dict], scope: Optional[dict] = None) -> list[dic
 
 
 def suggest_scope(ops: list[dict]) -> dict:
-    """基于 operation 集合自动推荐可用的策展维度（tags、methods、路径前缀）。"""
+    """Recommend curation dimensions from the operation set (tags, methods, path prefixes)."""
     tags: set[str] = set()
     methods: set[str] = set()
     prefixes: set[str] = set()
@@ -583,7 +583,7 @@ def suggest_scope(ops: list[dict]) -> dict:
 
 
 def op_input_schema(op: dict) -> dict:
-    """为单个 operation 生成 JSON Schema（用于市场清单与生成代码的参数说明）。"""
+    """Build a JSON Schema for one operation (used by the marketplace listing and generated code docs)."""
     props: dict[str, Any] = {}
     required: list[str] = []
     for p in op.get("path_params", []) + op.get("query_params", []):
@@ -595,12 +595,12 @@ def op_input_schema(op: dict) -> dict:
         if p.get("required"):
             required.append(p["name"])
     if op.get("has_body"):
-        props["body"] = {"type": "object", "description": "请求体（JSON）"}
+        props["body"] = {"type": "object", "description": "request body (JSON)"}
     return {"type": "object", "properties": props, "required": required}
 
 
 def list_operations(spec_source: str) -> str:
-    """同步封装（供脚本使用）。"""
+    """Synchronous wrapper (for scripts)."""
     return asyncio.run(list_operations_async(spec_source))
 
 
@@ -609,19 +609,19 @@ async def list_operations_async(spec_source: str) -> str:
 
 
 def format_operations(spec: dict) -> str:
-    """纯函数：把 spec 渲染成可读操作清单。"""
+    """Pure function: render a spec as a readable operation inventory."""
     ops = extract_operations(spec)
     if not ops:
-        return "该 spec 未发现任何可调用操作（paths 为空？）"
-    lines = [f"共 {len(ops)} 个操作："]
+        return "this spec exposes no callable operations (are paths empty?)"
+    lines = [f"{len(ops)} operations:"]
     for o in ops:
         flags = []
         if o["deprecated"]:
-            flags.append("已废弃")
+            flags.append("deprecated")
         if o["paginated"]:
-            flags.append("支持分页")
+            flags.append("paginated")
         if o["security"]:
-            flags.append("需鉴权")
+            flags.append("auth required")
         suffix = f"  [{'/'.join(flags)}]" if flags else ""
         lines.append(
             f"- [{o['method']}] {o['path']}  →  {o['operation_id']}  ({o['summary']}){suffix}"
@@ -630,17 +630,17 @@ def format_operations(spec: dict) -> str:
 
 
 def parse_openapi_spec(spec_source: str) -> dict:
-    """同步封装（供脚本使用）。"""
+    """Synchronous wrapper (for scripts)."""
     return asyncio.run(parse_openapi_spec_async(spec_source))
 
 
 async def parse_openapi_spec_async(spec_source: str) -> dict:
-    """契约 §4#2 点名的工具：解析 OpenAPI，返回结构化 operations 列表。"""
+    """The tool named by contract section 4 item 2: parse OpenAPI and return a structured operations list."""
     return spec_overview(await load_spec_async(spec_source))
 
 
 def spec_overview(spec: dict) -> dict:
-    """纯函数：已解析的 spec -> 结构化概览。"""
+    """Pure function: parsed spec -> structured overview."""
     ops = extract_operations(spec)
     info = spec.get("info") or {}
     return {
@@ -670,23 +670,23 @@ def spec_overview(spec: dict) -> dict:
 
 
 def ingest_spec(source: str) -> dict:
-    """parse_openapi_spec 的兼容别名（v1 名称，保留以便旧调用方不中断）。"""
+    """Backwards-compatible alias for parse_openapi_spec (the v1 name, kept so existing callers keep working)."""
     return parse_openapi_spec(source)
 
 
 # --------------------------------------------------------------------------- #
-# VERIFY：真实调用 + 真断言
+# VERIFY: real calls plus real assertions
 # --------------------------------------------------------------------------- #
 def _sample_value(param: dict) -> Any:
-    """生成参数样例值，供 VERIFY 做真实调用。
+    """Generate sample parameter values for the real calls VERIFY makes.
 
-    优先采用 spec 显式声明的 ``example`` / ``default`` / ``enum[0]``。
+    Prefers example / default / enum[0] declared explicitly in the spec.
 
-    原因：可验证性依赖「样例值真实可调用」。例如 ``/repos/{owner}/{repo}``
-    若按旧逻辑一律填 "sample"，会去请求 ``/repos/sample/sample`` 得到 404，
-    被误判为接口不可用；spec 里写明 example 就能验证到真实 2xx。
+    Why: verifiability depends on the sample values actually working. Under the old logic
+    /repos/{owner}/{repo} was filled with "sample", requesting /repos/sample/sample and getting a 404,
+    so a healthy endpoint was reported as broken. A declared example verifies to a real 2xx.
 
-    未声明时回退到按类型/名称推断，保持向后兼容（不影响既有 spec）。
+    When nothing is declared, fall back to inference by type and name, preserving compatibility with existing specs.
     """
     for key in ("example", "default"):
         val = param.get(key)
@@ -713,16 +713,16 @@ def _sample_value(param: dict) -> Any:
 
 
 def _structure_body(r: Any, max_items: int = 10) -> tuple[Any, bool]:
-    """把 HTTP 响应解析成 agent 可消费的结构化数据。
+    """Parse an HTTP response into structured data an agent can consume.
 
-    返回 ``(data, truncated)``；解析失败时 data 为 None，调用方回退到 body_preview。
+    Returns (data, truncated); data is None when parsing fails and callers fall back to body_preview.
 
-    为什么需要：``body_preview`` 是截断文本，agent 无法从中稳定提取字段，
-    多步任务（检索 → 核实 → 聚合）会在第一步就断掉，工具退化成一次性探针。
+    Why it exists: body_preview is truncated text, and an agent cannot reliably pull fields out of it,
+    so multi-step tasks (search → verify → aggregate) break at step one and the tool degrades to a one-shot probe.
 
-    为什么限长：搜索类接口可能一次返回上百条完整记录，直接透传会撑爆
-    模型上下文。列表默认只取前 ``max_items`` 条并标记 truncated，
-    让调用方知道「还有更多」，再自行缩小查询范围。
+    Why it is bounded: search endpoints can return hundreds of full records at once, and passing that through
+    floods the model context. Lists keep only the first max_items entries and set truncated,
+    so the caller knows more exist and can narrow the query.
     """
     try:
         data = r.json()
@@ -734,9 +734,9 @@ def _structure_body(r: Any, max_items: int = 10) -> tuple[Any, bool]:
 
 
 def classify_response(status_code: int) -> tuple[str, bool]:
-    """把 HTTP 状态码映射成明确结论。这是 v1「任何响应都算可达」的修复点。
+    """Map an HTTP status code to an explicit verdict. This is the fix for v1's "any response counts as reachable".
 
-    返回 (status, passed)。passed 只有在 2xx 时才为真。
+    Returns (status, passed). passed is true only for 2xx.
     """
     if 200 <= status_code < 300:
         return "passed", True
@@ -759,7 +759,7 @@ async def verify_operation_async(
     client: httpx.AsyncClient,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> dict:
-    """真实调用一次 operation，并按状态码给出 pass/fail 结论（不是恒真的可达性）。"""
+    """Call one operation for real and return a pass/fail verdict by status code (not a tautological reachability check)."""
     path = op["path"]
     used_params: dict[str, Any] = {}
     for p in op.get("path_params", []):
@@ -799,7 +799,7 @@ async def verify_operation_async(
         result["sample_body"] = (r.text or "")[:600]
     except (httpx.TransportError, httpx.TimeoutException) as e:
         result["error"] = f"{type(e).__name__}: {e}"
-    except Exception as e:  # noqa: BLE001 - 单点失败不应中断整体验证
+    except Exception as e:  # noqa: BLE001 - a single failure must not abort the whole verification
         result["error"] = f"{type(e).__name__}: {e}"
     return result
 
@@ -811,9 +811,9 @@ async def verify_api_async(
     concurrency: int = 8,
     scope: Optional[dict] = None,
 ) -> dict:
-    """并发验证，单请求超时有界，整体耗时可控（v1 最坏 20×15=300 秒且阻塞事件循环）。
+    """Verify concurrently with a bounded per-request timeout, so total time stays predictable
 
-    支持 scope 先策展再验证：只对过滤后的 operation 做真实调用。
+    (v1 could block the event loop for 20×15=300 seconds). Supports scope curation before verifying:
     """
     spec = await load_spec_async(source)
     all_ops = extract_operations(spec)
@@ -843,25 +843,25 @@ async def verify_api_async(
         "reached_but_failed": reached - passed,
         "unreachable": len(results) - reached,
         "verdict": (
-            "全部通过"
+            "all passed"
             if results and passed == len(results)
-            else ("部分通过" if passed else "无通过项（端点可能需要鉴权或真实参数）")
+            else ("partially passed" if passed else "nothing passed (endpoints may need auth or real parameters)")
         ),
         "note": (
-            "passed 仅统计 HTTP 2xx。401/403 记为 auth_required，404 记为 not_found，"
-            "4xx 记为 bad_request（常见于占位参数不满足业务校验），网络失败记为 unreachable。"
+            "passed counts only HTTP 2xx. 401/403 is recorded as auth_required, 404 as not_found, "
+            "other 4xx as bad_request (placeholder parameters often fail business validation), network failure as unreachable."
         ),
         "results": results,
     }
 
 
 def verify_api(source: str, max_ops: int = 20, timeout: float = 8.0, concurrency: int = 8, scope: Optional[dict] = None) -> dict:
-    """同步封装（供 verify.py / 单测使用）。"""
+    """Synchronous wrapper (for verify.py and unit tests)."""
     return asyncio.run(verify_api_async(source, max_ops, timeout, concurrency, scope))
 
 
 def verify_operation(base_url: str, op: dict, timeout: float = 8.0) -> dict:
-    """同步封装：单次验证。"""
+    """Synchronous wrapper: verify a single operation."""
 
     async def run() -> dict:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as c:
@@ -871,7 +871,7 @@ def verify_operation(base_url: str, op: dict, timeout: float = 8.0) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# MCPize：代码生成
+# MCPize: code generation
 # --------------------------------------------------------------------------- #
 def _py_ident(raw: str) -> str:
     s = re.sub(r"\W", "_", raw or "").strip("_")
@@ -883,7 +883,7 @@ def _py_ident(raw: str) -> str:
 
 
 def _dedupe(names: list[str]) -> list[str]:
-    """保证生成的函数名唯一（v1 中两个 operation 可能 sanitize 成同名而互相覆盖）。"""
+    """Keep generated function names unique (in v1 two operations could sanitize to the same name and overwrite each other)."""
     seen: dict[str, int] = {}
     out: list[str] = []
     for n in names:
@@ -897,14 +897,14 @@ def _dedupe(names: list[str]) -> list[str]:
 
 
 def _safe_docstring(text: str) -> str:
-    """把任意 spec 文本安全地放进 Python docstring，避免三引号/反斜杠破坏生成文件。"""
+    """Place arbitrary spec text inside a Python docstring safely, so triple quotes or backslashes cannot break the generated file."""
     cleaned = (text or "").replace("\\", "\\\\").replace('"""', "'''")
     cleaned = cleaned.replace("\r", " ").replace("\n", " ").strip()
     return cleaned[:200] or "auto-generated tool"
 
 
 def _auth_code(spec_auth: list[dict], require_auth: bool) -> tuple[str, str]:
-    """根据 spec 声明的鉴权方案生成鉴权代码块。返回 (imports_block, headers_expr)。"""
+    """Generate an auth code block from the schemes the spec declares. Returns (imports_block, headers_expr)."""
     if not require_auth:
         return "", "HEADERS: dict[str, str] = {}"
     lines = [
@@ -923,10 +923,10 @@ def _path_const_name(func_name: str) -> str:
 
 
 def _gen_single_tool(op: dict, func_name: str) -> str:
-    """生成单个工具。
+    """Generate one tool.
 
-    关键点：不做 f-string 插值，改用模板常量 + str.replace，
-    这样 {account-id}、{file.name} 这类非标识符占位符也能正确工作（v1 会产出 NameError）。
+    Key point: no f-string interpolation. A template constant plus str.replace keeps non-identifier
+    placeholders like {account-id} and {file.name} working (v1 produced NameError).
     """
     path_params = op.get("path_params", [])
     query_params = op.get("query_params", [])
@@ -934,7 +934,7 @@ def _gen_single_tool(op: dict, func_name: str) -> str:
     const = _path_const_name(func_name)
     doc = _safe_docstring(op.get("summary") or op["operation_id"])
 
-    # 签名 + 原始参数名到合法标识符的映射
+    # Signature plus a mapping from raw parameter names to valid identifiers
     sig_parts: list[str] = []
     mapping: list[tuple[str, str]] = []
     for p in path_params:
@@ -969,7 +969,7 @@ def _gen_single_tool(op: dict, func_name: str) -> str:
 
 
 def _register_{func_name}(mcp: FastMCP) -> None:
-    """注册 operation {op["operation_id"]}（{op["method"]} {op["path"]}）。"""
+    """Call operation {op["operation_id"]} ({op["method"]} {op["path"]})."""
 
     @mcp.tool()
     async def {func_name}({signature}) -> dict:
@@ -996,9 +996,9 @@ def _register_{func_name}(mcp: FastMCP) -> None:
 
 def _module_header(server_name: str, base_url: str, auth_block: str, extra_note: str = "") -> str:
     return f'''"""
-{server_name} · 由 MCPForge {VERSION} 自动生成
+{server_name} · generated by MCPForge {VERSION}
 
-{extra_note}运行：
+{extra_note}Run:
     pip install -r requirements.txt
     fastmcp dev server.py
 """
@@ -1024,7 +1024,7 @@ def generate_tool_code(
     server_name: str = "generated-mcp-server",
     require_auth: bool = False,
 ) -> str:
-    """同步封装（供脚本使用）。"""
+    """Synchronous wrapper (for scripts)."""
     return asyncio.run(generate_tool_code_async(source, operation_id, server_name, require_auth))
 
 
@@ -1034,7 +1034,7 @@ async def generate_tool_code_async(
     server_name: str = "generated-mcp-server",
     require_auth: bool = False,
 ) -> str:
-    """把单个 operation 生成为可直接部署的 FastMCP 工具代码。"""
+    """Generate one operation into deployable FastMCP tool code."""
     spec = await load_spec_async(source)
     return tool_code_from_spec(spec, operation_id, server_name, require_auth)
 
@@ -1045,19 +1045,19 @@ def tool_code_from_spec(
     server_name: str = "generated-mcp-server",
     require_auth: bool = False,
 ) -> str:
-    """纯函数：已解析的 spec -> 单工具代码。"""
+    """Pure function: parsed spec -> single tool source."""
     ops = extract_operations(spec)
     op = next((o for o in ops if o["operation_id"] == operation_id), None)
     if not op:
         return (
-            f"未找到 operation_id={operation_id!r}。可用 list_operations 查看全部；"
-            f"本 spec 共 {len(ops)} 个操作。"
+            f"operation_id={operation_id!r} not found. Use list_operations to see them all; "
+            f"this spec has {len(ops)} operations."
         )
     base = op["base_url"] or "https://REPLACE_WITH_API_BASE_URL"
     auth_block, _ = _auth_code(detect_auth(spec), require_auth)
     name = _py_ident(operation_id)
     return (
-        _module_header(server_name, base, auth_block, f"来源 API：{base}\n")
+        _module_header(server_name, base, auth_block, f"source API: {base}\n")
         + _gen_single_tool(op, name)
         + f'\n_register_{name}(mcp)\n\nif __name__ == "__main__":\n    mcp.run()\n'
     )
@@ -1071,7 +1071,7 @@ def generate_bundle(
     output_dir: str = "generated",
     scope: Optional[dict] = None,
 ) -> dict:
-    """同步封装（供脚本使用）。"""
+    """Synchronous wrapper (for scripts)."""
     return asyncio.run(
         generate_bundle_async(source, name, server_name, require_auth, output_dir, scope)
     )
@@ -1085,10 +1085,10 @@ async def generate_bundle_async(
     output_dir: str = "generated",
     scope: Optional[dict] = None,
 ) -> dict:
-    """生成完整可部署 bundle。落盘路径受 ensure_writable_dir 保护。
+    """Generate a complete deployable bundle. The output path is guarded by ensure_writable_dir.
 
-    scope 用于先策展再生成：把 100 个端点收敛到 5 个 Agent 可用的工具，
-    避免撑爆 Agent 上下文窗口。见 filter_operations 文档。
+    scope curates before generating: collapse 100 endpoints into 5 tools an agent can actually use
+    instead of flooding the agent context window. See filter_operations.
     """
     spec = await load_spec_async(source)
     return bundle_from_spec(spec, name, server_name, require_auth, output_dir, scope)
@@ -1102,12 +1102,12 @@ def bundle_from_spec(
     output_dir: str = "generated",
     scope: Optional[dict] = None,
 ) -> dict:
-    """纯函数：已解析的 spec -> 完整 bundle 落盘。"""
+    """Pure function: parsed spec -> full bundle written to disk."""
     all_ops = extract_operations(spec)
     ops = filter_operations(all_ops, scope)
     if not ops:
         raise SpecSourceError(
-            f"spec 中没有任何 operation 符合 scope 规则，无法生成 bundle（API：{name}）"
+            f"no operation in the spec matches the scope rules, cannot generate a bundle (API: {name})"
         )
     base = get_base_url(spec) or "https://REPLACE_WITH_API_BASE_URL"
     auth_schemes = detect_auth(spec)
@@ -1117,15 +1117,15 @@ def bundle_from_spec(
     auth_block, _ = _auth_code(auth_schemes, require_auth)
     func_names = _dedupe([_py_ident(o["operation_id"]) for o in ops])
 
-    note = f"来源 API：{base}\n"
+    note = f"source API: {base}\n"
     if scope:
-        note += f"原始端点数：{len(all_ops)}；经 scope 策展后生成 {len(ops)} 个工具。\n"
+        note += f"raw endpoints: {len(all_ops)}; after scope curation, {len(ops)} tools generated.\n"
     else:
-        note += f"共 {len(ops)} 个工具。\n"
+        note += f"{len(ops)} tools total.\n"
     if auth_schemes:
-        note += f"该 API 声明了鉴权方案：{', '.join(s['name'] for s in auth_schemes)}。\n"
+        note += f"this API declares auth schemes: {', '.join(s['name'] for s in auth_schemes)}.\n"
         if require_auth:
-            note += "运行时请通过环境变量 API_KEY 提供凭据。\n"
+            note += "supply credentials at runtime through the API_KEY environment variable.\n"
 
     server_py = (
         _module_header(server_name, base, auth_block, note)
@@ -1135,41 +1135,41 @@ def bundle_from_spec(
     )
     (out / "server.py").write_text(server_py, encoding="utf-8")
     (out / "requirements.txt").write_text(
-        "# 版本已钉死为生成与验证时所用的大版本线\nfastmcp>=4.0,<5.0\nhttpx>=0.27,<1.0\n",
+        "# version pinned to the major line used when generating and verifying\nfastmcp>=4.0,<5.0\nhttpx>=0.27,<1.0\n",
         encoding="utf-8",
     )
 
     readme_lines = [
-        f"# {name} · MCP Server（由 MCPForge 生成）",
+        f"# {name} · MCP Server (generated by MCPForge)",
         "",
-        f"源 API：`{base}`",
+        f"source API: `{base}`",
         "",
     ]
     if scope:
-        readme_lines.append(f"原始端点数：{len(all_ops)}；经 scope 策展后生成 **{len(ops)}** 个工具。")
+        readme_lines.append(f"raw endpoints: {len(all_ops)}; after scope curation, **{len(ops)}** tools generated.")
     else:
-        readme_lines.append(f"工具数：{len(ops)}")
+        readme_lines.append(f"tool count: {len(ops)}")
     readme_lines.append("")
     readme_lines.append(
-        "**该 API 需要鉴权**：运行时设置环境变量 `API_KEY`。" if require_auth else "该 API 无需鉴权。"
+        "**this API requires auth**: set the `API_KEY` environment variable at runtime." if require_auth else "this API needs no auth."
     )
     readme_lines.extend([
         "",
-        "## 运行",
+        "## Run",
         "",
         "```bash",
         "pip install -r requirements.txt",
-        "# stdio 调试",
+        "# stdio inspector",
         "fastmcp dev server.py",
-        "# 暴露为 HTTP 服务",
+        "# expose as an HTTP service",
         "fastmcp run server.py --transport streamable-http --port 8080",
         "```",
         "",
-        "## 工具清单",
+        "## Tools",
         "",
     ])
     readme_lines.extend(
-        f"- `{fn}` — [{o['method']}] {o['path']}（{o['summary'] or '无摘要'}）"
+        f"- `{fn}` — [{o['method']}] {o['path']} ({o['summary'] or 'no summary'})"
         for o, fn in zip(ops, func_names)
     )
     readme_lines.append("")
@@ -1195,7 +1195,7 @@ def bundle_from_spec(
 
 
 # --------------------------------------------------------------------------- #
-# MONETIZE：市场清单
+# MONETIZE: marketplace listing
 # --------------------------------------------------------------------------- #
 def manifest_from_spec(
     spec: dict,
@@ -1208,7 +1208,7 @@ def manifest_from_spec(
     description: str = "",
     currency: Optional[str] = None,
 ) -> dict:
-    """纯函数：已解析的 spec + 操作列表 -> 市场清单。"""
+    """Pure function: parsed spec + operation list -> marketplace listing."""
     operations = operations if operations is not None else extract_operations(spec)
     if auth_schemes is None:
         auth_schemes = detect_auth(spec)
@@ -1226,7 +1226,7 @@ def manifest_from_spec(
             "display_name": name.replace("-", " ").replace("_", " ").title(),
             "category": category,
             "description": description
-            or f"由 MCPForge 一键 MCP 化的 {name} API，共 {len(operations)} 个可调用工具。",
+            or f"{name} API turned into MCP by MCPForge in one pass, {len(operations)} callable tools.",
             "endpoint": base_url or "",
             "auth": {
                 "required": bool(auth_schemes),
@@ -1264,7 +1264,7 @@ def manifest_from_spec(
             },
         },
         "compliance": {
-            "note": "本清单为工程作品产出，用于演示 API→MCP 的封装与计量能力。",
+            "note": "produced as an engineering portfolio piece to demonstrate API→MCP wrapping and metering.",
             "contains_security_audit_capability": False,
             "crypto_token_speculation": False,
         },
@@ -1283,7 +1283,7 @@ def build_manifest(
     currency: Optional[str] = None,
     scope: Optional[dict] = None,
 ) -> dict:
-    """同步封装（供脚本使用）。"""
+    """Synchronous wrapper (for scripts)."""
     return asyncio.run(
         build_manifest_async(
             name, source, operations, base_url, auth_schemes,
@@ -1293,12 +1293,12 @@ def build_manifest(
 
 
 def preview_scope(spec_source: str, scope: Optional[dict] = None) -> dict:
-    """同步封装（供脚本使用）。"""
+    """Synchronous wrapper (for scripts)."""
     return asyncio.run(preview_scope_async(spec_source, scope))
 
 
 async def preview_scope_async(spec_source: str, scope: Optional[dict] = None) -> dict:
-    """在不生成代码的前提下，预览 scope 策展结果：原始数、过滤后数、保留了哪些 operation。"""
+    """Preview scope curation without generating code: raw count, filtered count, and which operations survive."""
     spec = await load_spec_async(spec_source)
     all_ops = extract_operations(spec)
     filtered = filter_operations(all_ops, scope)
@@ -1333,9 +1333,9 @@ async def build_manifest_async(
     currency: Optional[str] = None,
     scope: Optional[dict] = None,
 ) -> dict:
-    """生成市场格式清单。含工具级 JSON Schema、鉴权要求、额度与计费模型。
+    """Build a marketplace-format listing with per-tool JSON Schema, auth requirements, quota, and the billing model.
 
-    支持 scope 先策展再生成清单。
+    Supports scope curation before the listing is built.
     """
     spec: dict = {}
     if operations is None and source:
@@ -1350,7 +1350,7 @@ async def build_manifest_async(
 
 
 # --------------------------------------------------------------------------- #
-# 调用：通用 REST + 注册表
+# Calling: generic REST plus the registry
 # --------------------------------------------------------------------------- #
 async def _call_op_async(
     base_url: str,
@@ -1388,9 +1388,9 @@ async def _call_op_async(
             "latency_ms": round((time.perf_counter() - start) * 1000, 1),
             "ok": 200 <= r.status_code < 300,
             "body_preview": r.text[:2000],
-            # 结构化输出：agent 需要可消化的 JSON 才能做下一步决策。
-            # 只回传截断文本时，「检索候选 → 逐个核实」这类多步任务无法完成，
-            # 工具也就退化成一次性探针而非可用能力。
+            # Structured output: an agent needs consumable JSON to decide the next step.
+            # With only truncated text, multi-step flows like "search candidates → verify each" cannot complete,
+            # and the tool degrades from a usable capability to a one-shot probe.
             "data": data,
             "data_truncated": truncated,
         }
@@ -1435,7 +1435,7 @@ def call_rest_api(
     query: Optional[dict] = None,
     body: Optional[dict] = None,
 ) -> dict:
-    """通用 REST 调用：调通任意公开 API（online-callable capability 本体）。"""
+    """Generic REST call: reach any public API (the online-callable capability itself)."""
     return asyncio.run(call_rest_api_async(base_url, path, method, query, body))
 
 
@@ -1444,7 +1444,7 @@ def _registry_path() -> Path:
 
 
 class Registry:
-    """持久化注册表。原子写入；损坏文件留档而非静默清空；同名覆盖会显式提示。"""
+    """Persistent registry. Atomic writes; a corrupt file is kept aside rather than silently cleared; overwriting is reported explicitly."""
 
     def __init__(self, path: Optional[Path] = None):
         self.path = Path(path or _registry_path())
@@ -1480,7 +1480,7 @@ class Registry:
             raise
 
     def register(self, name: str, source: str, base_url: str = "", ops: Optional[list] = None) -> dict:
-        """同步封装（供脚本使用）。"""
+        """Synchronous wrapper (for scripts)."""
         return asyncio.run(self.register_async(name, source, base_url, ops))
 
     async def register_async(
@@ -1518,11 +1518,11 @@ class Registry:
     async def call_async(self, name: str, operation_id: str, params: dict) -> dict:
         entry = self.get(name)
         if not entry:
-            return {"error": f"未找到已注册 API {name!r}。请先 register_api_from_spec。已注册：{self.list_names()}"}
+            return {"error": f"registered API {name!r} not found. Run register_api_from_spec first. Registered: {self.list_names()}"}
         op = next((o for o in entry["operations"] if o["operation_id"] == operation_id), None)
         if not op:
             avail = [o["operation_id"] for o in entry["operations"]][:20]
-            return {"error": f"未找到 operation {operation_id!r}。可用（前 20）：{avail}"}
+            return {"error": f"operation {operation_id!r} not found; available (first 20): {avail}"}
 
         kwargs = dict(params or {})
         body = kwargs.pop("__body__", None)
@@ -1544,7 +1544,7 @@ class Registry:
 
 
 def health_check() -> dict:
-    """健康检查：返回 ok 即代表服务在线可调用（live 证据）。"""
+    """Health check: ok means the service is online and callable (live evidence)."""
     return {
         "status": "ok",
         "service": "MCPForge",
@@ -1558,5 +1558,5 @@ def health_check() -> dict:
     }
 
 
-# 全局单例
+# Global singleton
 _registry = Registry()

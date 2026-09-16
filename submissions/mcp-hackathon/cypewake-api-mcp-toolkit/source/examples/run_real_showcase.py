@@ -1,9 +1,9 @@
 """
-run_real_showcase.py · 用「真实、有用、agent 会调用」的 API 跑通 MCPForge 全链路，
-产出可复核的端到端证据（真实 2xx 校验 + 真实用量计量 + 真实出账）。
+run_real_showcase.py · run the full MCPForge chain against a real, useful API that agents actually call,
+producing checkable end-to-end evidence (real 2xx verification + real usage metering + real billing).
 
-不部署、不联网提交。仅本地离线运行，调用公网真实接口做 Verify 与 Metering。
-用法：NO_PROXY=* .venv/Scripts/python.exe examples/run_real_showcase.py
+No deployment, no networked submission. It runs locally and calls real public endpoints for Verify and Metering.
+Usage: NO_PROXY=* .venv/Scripts/python.exe examples/run_real_showcase.py
 """
 from __future__ import annotations
 import asyncio
@@ -28,7 +28,7 @@ API_NAME = "github_live"
 async def main() -> None:
     result: dict = {}
 
-    # 1) VERIFY —— 真实调用公网接口，只把 2xx 记为 passed
+    # 1) VERIFY — call the public endpoints for real; only 2xx counts as passed
     verify = await core.verify_api_async(SPEC, max_ops=20)
     result["verify"] = {
         "base_url": verify["base_url"],
@@ -49,11 +49,11 @@ async def main() -> None:
         ],
     }
 
-    # 2) BUILD / REGISTER —— 把 spec 注册进本地注册表（持久化）
+    # 2) BUILD / REGISTER — register the spec into the local registry (persisted)
     reg = await core._registry.register_async(API_NAME, SPEC)
     result["register"] = {"name": API_NAME, "ops": reg.get("operations")}
 
-    # 3) 真实调用若干次 —— 产生可核对的真实用量计量（MONETIZE 的原材料）
+    # 3) Make several real calls — producing checkable real usage metering (the raw material for MONETIZE)
     calls = []
     for op_id in ["getZen", "getRateLimit", "listPublicEvents"]:
         for _ in range(2):
@@ -68,19 +68,19 @@ async def main() -> None:
             )
     result["calls"] = calls
 
-    # 4) MONETIZE —— 真实用量报告 + 计价档出账
+    # 4) MONETIZE — real usage report plus a tiered invoice
     report = metering.get_meter().report(API_NAME)
     result["usage_report"] = report
     invoice = metering.get_meter().simulate_invoice(API_NAME, pricing_tier="pro", basis="actual")
     result["invoice"] = invoice
 
-    # 5) BUILD manifest —— 市场格式上架清单（带计价档 + 真实 usage 映射）
+    # 5) BUILD manifest — marketplace-format listing (pricing tier plus the real usage mapping)
     manifest = await core.build_manifest_async(
         API_NAME,
         source=SPEC,
         category="api-tool",
         pricing_tier="pro",
-        description="CoinGecko 公共行情，真实可调用、按次计费就绪。",
+        description="GitHub public REST API: genuinely callable and ready for per-call billing.",
         currency="USD",
     )
     result["manifest"] = {
@@ -91,12 +91,12 @@ async def main() -> None:
         "billing_model": manifest.get("pricing", {}).get("billing_model"),
     }
 
-    # 6) 走查页验证口径：健康检查
+    # 6) Walkthrough page check: the health endpoint
     result["health"] = core.health_check()
 
     OUT.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    print(f"\n[OK] 证据写入 {OUT}")
+    print(f"\n[OK] evidence written to {OUT}")
 
 
 if __name__ == "__main__":

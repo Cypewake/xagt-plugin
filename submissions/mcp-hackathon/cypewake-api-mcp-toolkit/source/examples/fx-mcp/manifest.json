@@ -1,12 +1,12 @@
 {
   "schema_version": "2.0",
   "generated_by": "MCPForge/2.1.0",
-  "generated_at": "2026-09-13T08:57:07.431070+00:00",
+  "generated_at": "2026-09-16T16:08:15.296109+00:00",
   "listing": {
     "name": "fx-mcp",
     "display_name": "Fx Mcp",
     "category": "api-tool",
-    "description": "由 MCPForge 一键 MCP 化的 fx-mcp API，共 1 个可调用工具。",
+    "description": "fx-mcp API turned into MCP by MCPForge in one pass, 1 callable tools.",
     "endpoint": "https://api.exchangerate-api.com/v4",
     "auth": {
       "required": false,
@@ -65,7 +65,7 @@
     }
   },
   "compliance": {
-    "note": "本清单为工程作品产出，用于演示 API→MCP 的封装与计量能力。",
+    "note": "produced as an engineering portfolio piece to demonstrate API→MCP wrapping and metering.",
     "contains_security_audit_capability": false,
     "crypto_token_speculation": false
   }

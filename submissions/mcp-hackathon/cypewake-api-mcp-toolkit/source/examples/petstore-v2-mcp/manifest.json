@@ -1,12 +1,12 @@
 {
   "schema_version": "2.0",
   "generated_by": "MCPForge/2.1.0",
-  "generated_at": "2026-09-13T08:57:03.586495+00:00",
+  "generated_at": "2026-09-16T16:08:13.697567+00:00",
   "listing": {
     "name": "petstore-v2-mcp",
     "display_name": "Petstore V2 Mcp",
     "category": "api-tool",
-    "description": "由 MCPForge 一键 MCP 化的 petstore-v2-mcp API，共 20 个可调用工具。",
+    "description": "petstore-v2-mcp API turned into MCP by MCPForge in one pass, 20 callable tools.",
     "endpoint": "https://petstore.swagger.io/v2",
     "auth": {
       "required": true,
@@ -368,7 +368,7 @@
     }
   },
   "compliance": {
-    "note": "本清单为工程作品产出，用于演示 API→MCP 的封装与计量能力。",
+    "note": "produced as an engineering portfolio piece to demonstrate API→MCP wrapping and metering.",
     "contains_security_audit_capability": false,
     "crypto_token_speculation": false
   }

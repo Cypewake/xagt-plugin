@@ -1,15 +1,15 @@
 """
-build_examples.py · 生成示例包（提交即带，评委无需运行即可查看 MCPize 的真实产物）
+build_examples.py · generate the example bundles (shipped with the submission, so reviewers can inspect real MCPize output without running anything)
 
-刻意选择四个形态互不相同的公开 spec，而不是只用一个 —— 单一示例会让人怀疑
-作品是「按验收用例裁剪」的，多形态才能证明通用性：
+Four public specs with deliberately different shapes, not just one — a single example makes it look like
+the work was tailored to the acceptance cases; multiple shapes prove generality:
 
-  1. petstore-v3-mcp  OpenAPI 3.0 / JSON / servers.url 是相对路径 / oauth2 + apiKey
-  2. petstore-v2-mcp  OpenAPI 2.0（swagger 字段 + host/basePath）/ 验证 2.0 兼容分支
-  3. httpbin-mcp      OpenAPI 3.0 / YAML / 73 个操作 / 无鉴权
-  4. fx-mcp           汇率 API（契约 §4#1 明确要求「天气/汇率」，天气在验收里已覆盖）
+  1. petstore-v3-mcp  OpenAPI 3.0 / JSON / relative servers.url / oauth2 + apiKey
+  2. petstore-v2-mcp  OpenAPI 2.0 (swagger field + host/basePath) / exercises the 2.0 compatibility branch
+  3. httpbin-mcp      OpenAPI 3.0 / YAML / 73 operations / no auth
+  4. fx-mcp           FX rates API (contract section 4 item 1 asks for weather/FX; weather is covered in acceptance)
 
-运行：python examples/build_examples.py
+Run: python examples/build_examples.py
 """
 
 from __future__ import annotations
@@ -25,22 +25,22 @@ EXAMPLES = [
     {
         "name": "petstore-v3-mcp",
         "spec": "https://petstore3.swagger.io/api/v3/openapi.json",
-        "note": "OpenAPI 3.0 / 相对 server url / 需鉴权",
+        "note": "OpenAPI 3.0 / relative server url / auth required",
     },
     {
         "name": "petstore-v2-mcp",
         "spec": "https://petstore.swagger.io/v2/swagger.json",
-        "note": "OpenAPI 2.0（swagger + host + basePath）",
+        "note": "OpenAPI 2.0 (swagger + host + basePath)",
     },
     {
         "name": "httpbin-mcp",
         "spec": "https://api.apis.guru/v2/specs/httpbin.org/0.9.2/openapi.yaml",
-        "note": "OpenAPI 3.0 / YAML / 大量操作 / 免鉴权",
+        "note": "OpenAPI 3.0 / YAML / many operations / no auth",
     },
     {
         "name": "fx-mcp",
         "spec": "https://api.apis.guru/v2/specs/exchangerate-api.com/4/openapi.json",
-        "note": "汇率 API",
+        "note": "FX rates API",
     },
 ]
 
@@ -48,7 +48,7 @@ EXAMPLES = [
 def main() -> int:
     root = Path(__file__).parent
     ok = True
-    print(f"生成示例包到 {root}\n")
+    print(f"generating example bundles into {root}\n")
     for item in EXAMPLES:
         try:
             spec = core.load_spec(item["spec"])
@@ -56,20 +56,20 @@ def main() -> int:
             result = core.bundle_from_spec(
                 spec, item["name"], output_dir=str(root)
             )
-            # 语法校验：生成的 server.py 必须可编译
+            # Syntax check: the generated server.py must compile
             compile(
                 (Path(result["output_dir"]) / "server.py").read_text(encoding="utf-8"),
                 "server.py",
                 "exec",
             )
             print(
-                f"[OK]   {item['name']:20s} {result['tools']:3d} 个工具  "
+                f"[OK]   {item['name']:20s} {result['tools']:3d} tools  "
                 f"({overview['openapi_version']})  {item['note']}"
             )
         except Exception as e:  # noqa: BLE001
             ok = False
             print(f"[FAIL] {item['name']:20s} {type(e).__name__}: {e}")
-    print("\n完成。" if ok else "\n存在失败。")
+    print("\ndone." if ok else "\nfailures present.")
     return 0 if ok else 1
 
 

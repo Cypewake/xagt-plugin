@@ -1,106 +1,100 @@
-# MCPForge — API→MCP 全链路工厂
+# MCPForge — API-to-MCP Factory
 
-> 本文件按官方 `submissions/TEMPLATE.md` 填写；部署 URL 与审查 commit 在公开部署后回填（见 `verification/README.md`）。
+> Filled from the official `submissions/TEMPLATE.md`. Deployment URL and review commit are the live values verified in `verification/README.md`.
 
 ## Capability
 
-- **一句话描述**：把「已有 REST API」变成「AI Agent 能直接调用的 MCP 工具」，完整覆盖官方四段式 **Build → Verify → MCPize → Monetize**。
-- **服务对象**：需要把内部或第三方 REST API 接入 Agent 的开发者与团队。
-- **能力边界**：输入 OpenAPI/Swagger 规格或在线 API，产出可部署的 MCP 工具集 + 真实可验证调用 + 按次计费出账。不做安全/审计/链上风控类外壳（符合赛道红线）。
+- **One line:** turns an existing REST API into MCP tools an AI agent can call, covering the four official stages — **Build → Verify → MCPize → Monetize**.
+- **Who it serves:** developers and teams connecting internal or third-party REST APIs to agents.
+- **Scope:** takes an OpenAPI/Swagger description or a live API and produces deployable MCP tools, real verified calls, and per-call billing. No security, audit, or on-chain risk surface — the track's disqualifying categories do not apply.
 
 ## Live API
 
-- **API base URL**：`https://mcpforge-cypewake.app.workbuddy.host`
-- **Health-check URL**：`https://mcpforge-cypewake.app.workbuddy.host/api/health`
-- **鉴权**：none（公开、免密钥，仅供评审窗口调用）
-- **限流 / 已知限制**：演示用单进程；真实出网依赖 `api.github.com` 可达。
-- **API 契约**：`source/examples/github-openapi.json` 与生成代码 `source/examples/*/server.py`。
+- **API base URL:** `https://mcpforge-cypewake.app.workbuddy.host`
+- **Health-check URL:** `https://mcpforge-cypewake.app.workbuddy.host/api/health`
+- **Auth:** none. Public and keyless for the review window.
+- **Rate limits / known limits:** single-process demo; live calls depend on `api.github.com` reachability from the host.
+- **API contract:** `source/examples/github-openapi.json` and generated code under `source/examples/*/server.py`.
 
 ## Source and reproducibility
 
-- **Source repository**：https://github.com/cypewake/xagt-plugin
-- **Review commit**：`41ed4e5160e52fc51908c6bbc648d325a2d685de`
-- **Source submitted in this PR**：`source/`
-- **Run tests**：`pip install -r source/requirements.txt && pytest source/tests`（53 离线 + 6 在线标记，全绿）
-- **Run locally**：`pip install "fastmcp>=4.0,<5.0"` 然后 `uvicorn demo_app:app --host 0.0.0.0 --port 8000`
-- **Deploy**：`uvicorn demo_app:app --host 0.0.0.0 --port $PORT`，并设置环境变量 `REVIEW_COMMIT=41ed4e5160e52fc51908c6bbc648d325a2d685de`
-- **Version binding**：部署服务通过环境变量 `REVIEW_COMMIT` 暴露审查 commit；`/api/health` 与 `/.well-known/xagent-verification.json` 回传该 commit。
+- **Source repository:** https://github.com/cypewake/xagt-plugin
+- **Review commit:** `92c6032240e7ef105cce50230f49aa353cf8ccda`
+- **Source submitted in this PR:** `source/`
+- **Run tests:** `pip install -r source/requirements.txt && pytest source/tests` (53 offline + 6 live-marked, all green)
+- **Run locally:** `pip install "fastmcp>=4.0,<5.0"` then `uvicorn demo_app:app --host 0.0.0.0 --port 8000`
+- **Deploy:** `uvicorn demo_app:app --host 0.0.0.0 --port $PORT` with `REVIEW_COMMIT=92c6032240e7ef105cce50230f49aa353cf8ccda`
+- **Version binding:** the deployment exposes the review commit through `REVIEW_COMMIT`; `/api/health` and `/.well-known/xagent-verification.json` both return it.
 
-部署服务必须暴露：
+The deployment returns exactly:
 
 ```json
 // GET https://mcpforge-cypewake.app.workbuddy.host/api/health
-{"status":"ok","commit":"41ed4e5160e52fc51908c6bbc648d325a2d685de"}
+{"status":"ok","commit":"92c6032240e7ef105cce50230f49aa353cf8ccda"}
 ```
 
 ```json
 // GET https://mcpforge-cypewake.app.workbuddy.host/.well-known/xagent-verification.json
-{"schemaVersion":1,"slug":"cypewake-api-mcp-toolkit","commit":"41ed4e5160e52fc51908c6bbc648d325a2d685de"}
+{"schemaVersion":1,"slug":"cypewake-api-mcp-toolkit","commit":"92c6032240e7ef105cce50230f49aa353cf8ccda"}
 ```
 
 ## Verification
 
-可复现调用说明与脱敏示例响应见 `verification/README.md`。
+Reproducible call instructions and redacted sample responses live in `verification/README.md`.
 
-- **Health-check 结果**：`status=ok`，`commit=41ed4e5160e52fc51908c6bbc648d325a2d685de`。
-- **Capability call**：通过 MCP 端点调用 `call_rest_api`（GitHub `/zen`）或 `register(github_live)+call_registered_api(getZen)`，均返回 HTTP 200。
-- **预期错误行为**：传入未注册 API 名 → 明确错误；传入内网 URL → 被 `assert_public_url` 拒绝（SSRF 防护）。
+- **Health-check result:** `status=ok`, `commit=92c6032240e7ef105cce50230f49aa353cf8ccda`.
+- **Capability call:** over the MCP endpoint, `call_rest_api` against GitHub `/zen`, or `register(github_live)` followed by `call_registered_api(getZen)`, both return HTTP 200.
+- **Expected error behavior:** an unregistered API name returns an explicit error; a private-network URL is rejected by `assert_public_url` (SSRF guard).
 
-## 真实任务（Real task）
+## Real task
 
-评分最高的一项是「能否完成有意义的真实任务，胜过纯 prompt demo」。本作品用一个
-**必须依赖实时数据**的任务来回答，而不是靠单步探测充数。
+The heaviest scoring dimension asks whether the entry completes a meaningful real task rather than a prompt demo. This entry answers with a task that depends on live data.
 
-**任务**：为某个技术主题生成选型简报（默认主题 `model-context-protocol`）。
+**Task:** build a technology selection brief for a topic (default `model-context-protocol`).
 
-**为什么纯 prompt 做不到**：结论依赖实时的 star / fork / open issues / 最近更新时间，
-这些数值每天都在变，模型凭训练记忆给不出真实数字，必须调用工具回源。
+**Why a prompt cannot do it:** the answer rests on live stars, forks, open issues, and last-push timestamps. Those change daily, so a model recalling training data returns wrong numbers. The tools have to go back to the source.
 
-**三步编排**（每步都是真实 HTTP，可在部署页面现场重跑）：
+**Three-step orchestration**, every step a real HTTP call, re-runnable on the deployed page:
 
-1. `searchRepositories` —— 检索候选仓库
-2. `getRepository` —— 逐个回源核实（搜索摘要可能过期，必须核实）
-3. 本地聚合 —— 排序并生成简报
+1. `searchRepositories` — find candidate repositories.
+2. `getRepository` — verify each candidate at the source, since search summaries go stale.
+3. Local aggregation — rank and emit the brief.
 
-**最近一次真实结果**（完整证据：`source/examples/real_agent_task_result.json`）：
+**Latest real result** (full evidence: `source/examples/real_agent_task_result.json`):
 
-| # | 仓库 | Star | Fork | Open issues | 语言 |
+| # | Repository | Stars | Forks | Open issues | Language |
 |---|---|---:|---:|---:|---|
-| 1 | modelcontextprotocol/servers | 90384 | 11640 | 536 | TypeScript |
-| 2 | HKUDS/nanobot | 48216 | 8523 | 784 | Python |
-| 3 | DeusData/codebase-memory-mcp | 43513 | 3541 | 591 | C |
+| 1 | modelcontextprotocol/servers | 90,384 | 11,640 | 536 | TypeScript |
+| 2 | HKUDS/nanobot | 48,216 | 8,523 | 784 | Python |
+| 3 | DeusData/codebase-memory-mcp | 43,513 | 3,541 | 591 | C |
 
-**变现口径**：该任务实际产生 4 次真实调用。按 pro 档（$8 / 1k 次，含 5 万次免费额度）
-测算，规模化到 100 万次/月为 **7,600 USD/月**（字段 `invoice_scaled_1m`）。
-实际账单为 0 是因用量未超出免费额度，属预期行为，并非计费未生效——
-因此证据里同时给出「实际口径」与「规模化口径」两张账单。
+**Monetization figures:** metering recorded 24 calls for this API. At the pro tier ($8.00 per 1k calls, 50,000 included), scaling to 1,000,000 calls per month gives **7,600 USD/month** (field `invoice_scaled`). The actual invoice reads 0 USD because usage stays inside the free quota — expected behavior, not a broken meter — so the evidence ships both an actual-basis and a scaled-basis invoice.
 
-**现场复现**：打开部署页 → 「真实任务演示」区块 → 点「运行真实任务」；
-或直接 `POST /api/real-task {"topic":"..."}` 查看逐步真实调用与状态码。
+**Reproduce live:** open the deployment → "Real task" section → run it; or `POST /api/real-task {"topic":"..."}` to see each real call with its status code.
 
 ## Security and data handling
 
-- **采集数据**：无用户数据持久化；仅运行时内存计量计数（进程退出即失）。
-- **目的与留存**：计量用于演示 Monetize 按次出账，不做长期留存。
-- **第三方 / 出站**：仅 `api.github.com`（真实出网验证）；`assert_public_url` + 逐跳重定向校验防护内网跳转（SSRF）。
-- **密钥**：无密钥提交；评审访问仅在批准后私信道提供。
-- **已知风险 / 限制**：演示服务无鉴权，仅用于评审窗口（9/20–10/1）可达。
+- **Data collected:** none persisted. Usage counters live in process memory and in the local `usage.json` store.
+- **Purpose and retention:** metering exists to demonstrate per-call billing. No long-term retention.
+- **Third-party / outbound:** only `api.github.com` for live verification; `assert_public_url` plus per-hop redirect validation blocks private-network pivots (SSRF).
+- **Secrets:** none committed. Review access is granted only through approved channels.
+- **Known risks / limits:** the demo service has no authentication and is meant to stay reachable for the review window (Sept 20 – Oct 1).
 
 ## Support
 
-- **团队 / 作者**：cypewake
-- **联系**：GitHub @cypewake
-- **许可 / 权利**：提交者拥有源码权利，并授权 X-Agent 评审与归档。
+- **Author:** cypewake
+- **Contact:** GitHub @cypewake
+- **Rights:** the submitter owns the source and grants X-Agent the right to review and archive it.
 
-## 身份映射（Identity mapping）
+## Identity mapping
 
-> 用于评审对账：以下两个标识为**同一参与者**。
+> For reviewer reconciliation: both identifiers below are the same participant.
 
-| 渠道 | 标识 |
+| Channel | Identifier |
 | --- | --- |
-| Luma 报名（选 Open Innovation 赛道） | **wake** |
-| GitHub 账号 / 本 PR 提交账号 | **cypewake** |
-| 公开部署域名 | mcpforge-cypewake.app.workbuddy.host |
-| 本 PR | xagentAI/xagt-plugin#61 |
+| Luma registration (Open Innovation track) | **wake** |
+| GitHub account / PR author | **cypewake** |
+| Public deployment domain | mcpforge-cypewake.app.workbuddy.host |
+| This PR | xagentAI/xagt-plugin#61 |
 
-若评审需要把报名记录与本 PR 关联，请以上表为准：`wake`（Luma）= `cypewake`（GitHub），同一人。
+To match the registration record against this PR: `wake` (Luma) = `cypewake` (GitHub), one person.

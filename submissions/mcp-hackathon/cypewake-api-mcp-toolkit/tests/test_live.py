@@ -1,12 +1,12 @@
 """
-test_live.py · 需要真实公网访问的冒烟测试
+test_live.py · smoke tests that need real internet access
 
-默认不执行（pytest 配置里只跑离线用例）。要跑：
+Not collected by default (the pytest configuration runs offline tests only). To run them:
 
     pytest -m live -v
 
-设计意图：把「依赖外部网络」这件事显式隔离出来，避免像 v1 那样
-让一份会随上游腐化的检查冒充「全量通过」。
+Intent: isolate the "depends on an external network" part explicitly, so a check that decays with upstream
+never pretends to be a full pass the way v1 did.
 """
 
 from __future__ import annotations
@@ -49,8 +49,8 @@ def test_fx_api_returns_200_and_cny_rate():
 def test_verify_api_reports_real_pass_fail_not_always_true():
     v = core.verify_api(PETSTORE, max_ops=8, timeout=8)
     assert v["verified"] == 8
-    # 关键：不能是「全部 reachable」这种恒真结论
-    assert v["passed"] < v["verified"], "Petstore 的 /pet 系列需要鉴权，不应全部判为通过"
+    # Key point: the verdict must not be a tautological "everything reachable"
+    assert v["passed"] < v["verified"], "Petstore's /pet endpoints require auth, so not everything should pass"
     statuses = {r["status"] for r in v["results"]}
     assert statuses & {"passed", "auth_required", "bad_request", "not_found"}
 
@@ -60,12 +60,12 @@ def test_registered_call_end_to_end(tmp_path):
     reg.register("petstore", PETSTORE)
     res = reg.call("petstore", "findPetsByStatus", {"status": "available"})
     assert res["status_code"] == 200
-    # body_preview 是截断预览，可能是残缺 JSON，故只断言内容特征
+    # body_preview is a truncated preview and may be partial JSON, so assert only on content traits
     assert '"id"' in res["body_preview"]
 
 
 def test_generated_bundle_server_runs(tmp_path, monkeypatch):
-    """生成物不是「看起来像代码」，而是真的能被 FastMCP 加载。"""
+    """The output is not merely code that looks right — FastMCP can actually load it."""
     from fastmcp import Client
 
     monkeypatch.chdir(tmp_path)

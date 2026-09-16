@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "GitHub 公共 REST API（MCPForge 样板）",
+    "title": "GitHub public REST API (MCPForge showcase)",
     "version": "1.1.0",
-    "description": "真实、免密钥（未认证限流内可用）的高频开发者接口。覆盖 agent 的完整工作流：探测可达性 → 按主题检索 → 拉取具体指标做决策。用于演示 MCPForge 的 Build → Verify → MCPize → Monetize 全链路，并支撑一个真实任务「生成技术选型简报」——该任务依赖实时 star / issue 数据，纯 prompt 无法伪造。"
+    "description": "Real, keyless endpoints usable within unauthenticated rate limits, and commonly called by developers. They cover a complete agent workflow: probe reachability → search by topic → pull concrete metrics to decide. They drive the full MCPForge Build → Verify → MCPize → Monetize chain and support a real task, “produce a technology selection brief”, which depends on live star and issue data that a prompt cannot fabricate."
   },
   "servers": [
     { "url": "https://api.github.com" }
@@ -12,92 +12,92 @@
     "/zen": {
       "get": {
         "operationId": "getZen",
-        "summary": "格言探活",
-        "description": "返回一句设计格言，用于探活与连通性自检。",
+        "summary": "Motto liveness probe",
+        "description": "Returns a short design motto, used for liveness and connectivity self-checks.",
         "responses": { "200": { "description": "ok" } }
       }
     },
     "/rate_limit": {
       "get": {
         "operationId": "getRateLimit",
-        "summary": "查询限流额度",
-        "description": "返回当前 IP 的 API 限流情况，agent 用它判断是否需要退避。",
+        "summary": "Rate limit quota",
+        "description": "Returns the API rate limit for the current IP, which an agent uses to decide whether to back off.",
         "responses": { "200": { "description": "ok" } }
       }
     },
     "/events": {
       "get": {
         "operationId": "listPublicEvents",
-        "summary": "公开事件流",
-        "description": "返回全网公开事件，agent 用它做活动监听与趋势感知。",
+        "summary": "Public event stream",
+        "description": "Returns public events across the network; an agent uses them for activity monitoring and trend awareness.",
         "responses": { "200": { "description": "ok" } }
       }
     },
     "/search/repositories": {
       "get": {
         "operationId": "searchRepositories",
-        "summary": "按主题检索仓库",
-        "description": "返回匹配关键词的仓库列表（含 star 数、简介）。这是技术选型调研的第一步；结果随真实世界变化，纯 prompt 无法凭记忆给出。",
+        "summary": "Search repositories by topic",
+        "description": "Returns repositories matching the keywords, including star counts and descriptions. This is the first step of a technology selection investigation, and because results track the real world, a prompt cannot answer from memory.",
         "parameters": [
           {
             "name": "q",
             "in": "query",
             "required": true,
             "schema": { "type": "string", "example": "MCP" },
-            "description": "检索关键词，如 MCP、agents、llm"
+            "description": "Search keywords, e.g. MCP, agents, llm"
           },
           {
             "name": "sort",
             "in": "query",
             "required": false,
             "schema": { "type": "string", "example": "stars" },
-            "description": "排序字段：stars / forks / updated"
+            "description": "Sort field: stars / forks / updated"
           },
           {
             "name": "order",
             "in": "query",
             "required": false,
             "schema": { "type": "string", "example": "desc" },
-            "description": "排序方向：asc / desc"
+            "description": "Sort direction: asc / desc"
           },
           {
             "name": "per_page",
             "in": "query",
             "required": false,
             "schema": { "type": "int", "example": 5 },
-            "description": "每页返回条数，上限 100"
+            "description": "Results per page, maximum 100"
           }
         ],
         "responses": {
           "200": { "description": "ok" },
-          "422": { "description": "查询参数不合法" }
+          "422": { "description": "Invalid query parameters" }
         }
       }
     },
     "/repos/{owner}/{repo}": {
       "get": {
         "operationId": "getRepository",
-        "summary": "获取仓库实时指标",
-        "description": "返回单个仓库的实时指标：star、fork、open issues、主语言、最近更新时间。agent 用它核实候选项目，避免被搜索摘要里的过期数据误导。",
+        "summary": "Repository live metrics",
+        "description": "Returns live metrics for one repository: stars, forks, open issues, primary language, and last update time. An agent uses it to verify candidates instead of trusting stale search summaries.",
         "parameters": [
           {
             "name": "owner",
             "in": "path",
             "required": true,
             "schema": { "type": "string", "example": "modelcontextprotocol" },
-            "description": "仓库所有者（用户或组织）"
+            "description": "Repository owner (user or organization)"
           },
           {
             "name": "repo",
             "in": "path",
             "required": true,
             "schema": { "type": "string", "example": "servers" },
-            "description": "仓库名"
+            "description": "Repository name"
           }
         ],
         "responses": {
           "200": { "description": "ok" },
-          "404": { "description": "仓库不存在或无权访问" }
+          "404": { "description": "Repository not found or not accessible" }
         }
       }
     }

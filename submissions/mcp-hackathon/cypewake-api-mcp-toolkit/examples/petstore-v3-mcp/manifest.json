@@ -1,12 +1,12 @@
 {
   "schema_version": "2.0",
   "generated_by": "MCPForge/2.1.0",
-  "generated_at": "2026-09-13T08:57:01.658478+00:00",
+  "generated_at": "2026-09-16T16:08:12.538638+00:00",
   "listing": {
     "name": "petstore-v3-mcp",
     "display_name": "Petstore V3 Mcp",
     "category": "api-tool",
-    "description": "由 MCPForge 一键 MCP 化的 petstore-v3-mcp API，共 19 个可调用工具。",
+    "description": "petstore-v3-mcp API turned into MCP by MCPForge in one pass, 19 callable tools.",
     "endpoint": "https://petstore3.swagger.io/api/v3",
     "auth": {
       "required": true,
@@ -44,7 +44,7 @@
         "properties": {
           "body": {
             "type": "object",
-            "description": "请求体（JSON）"
+            "description": "request body (JSON)"
           }
         },
         "required": []
@@ -60,7 +60,7 @@
         "properties": {
           "body": {
             "type": "object",
-            "description": "请求体（JSON）"
+            "description": "request body (JSON)"
           }
         },
         "required": []
@@ -182,7 +182,7 @@
           },
           "body": {
             "type": "object",
-            "description": "请求体（JSON）"
+            "description": "request body (JSON)"
           }
         },
         "required": [
@@ -211,7 +211,7 @@
         "properties": {
           "body": {
             "type": "object",
-            "description": "请求体（JSON）"
+            "description": "request body (JSON)"
           }
         },
         "required": []
@@ -263,7 +263,7 @@
         "properties": {
           "body": {
             "type": "object",
-            "description": "请求体（JSON）"
+            "description": "request body (JSON)"
           }
         },
         "required": []
@@ -279,7 +279,7 @@
         "properties": {
           "body": {
             "type": "object",
-            "description": "请求体（JSON）"
+            "description": "request body (JSON)"
           }
         },
         "required": []
@@ -348,7 +348,7 @@
           },
           "body": {
             "type": "object",
-            "description": "请求体（JSON）"
+            "description": "request body (JSON)"
           }
         },
         "required": [
@@ -401,7 +401,7 @@
     }
   },
   "compliance": {
-    "note": "本清单为工程作品产出，用于演示 API→MCP 的封装与计量能力。",
+    "note": "produced as an engineering portfolio piece to demonstrate API→MCP wrapping and metering.",
     "contains_security_audit_capability": false,
     "crypto_token_speculation": false
   }

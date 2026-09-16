@@ -1,9 +1,9 @@
 """
-test_core.py · 离线单元测试（不依赖公网）
+test_core.py · offline unit tests (no internet dependency)
 
-这些用例存在的意义是对抗式复核的直接产物：v1 的「7/7 全过」依赖实时公网、
-且完全没有覆盖粘贴文本、非标识符占位符、路径穿越、SSRF 等分支，
-导致缺陷被绿灯掩盖。此处全部改为离线可复现。
+These cases exist as a direct product of the adversarial review: v1's "7/7 all green" depended on live internet
+and never covered pasted text, non-identifier placeholders, path traversal, or SSRF,
+so defects hid behind green lights. Everything here reproduces offline.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "offline-api.json"
 
 
 def asyncio_run(coro):
-    """同步跑协程。测试本身是同步用例，避免引入事件循环夹具的隐式行为。"""
+    """Run coroutines synchronously. The tests stay synchronous to avoid implicit behavior from event-loop fixtures."""
     return asyncio.run(coro)
 
 
@@ -32,7 +32,7 @@ def fixture_spec() -> dict:
 
 # ----------------------------- BUILD --------------------------------------- #
 def test_paste_json_text_is_accepted():
-    """回归 v1 缺陷：粘贴的 OpenAPI 文本曾被 _looks_like_path 误判为文件路径。"""
+    """Regression for the v1 defect: pasted OpenAPI text was misclassified as a file path by _looks_like_path."""
     pasted = json.dumps(
         {
             "openapi": "3.0.0",
@@ -57,7 +57,7 @@ def test_paste_yaml_text_is_accepted():
 def test_non_spec_text_gives_diagnostic_error():
     with pytest.raises(core.SpecSourceError) as ei:
         core.parse_openapi_spec("hello world")
-    assert "不是 OpenAPI 对象" in str(ei.value)
+    assert "not an OpenAPI object" in str(ei.value)
 
 
 def test_nonexistent_file_path_reports_file_error():
@@ -66,11 +66,11 @@ def test_nonexistent_file_path_reports_file_error():
 
 
 def test_ref_and_path_level_parameters_are_merged(fixture_spec):
-    """$ref 参数应被展开，且 path 级 parameters 应与 operation 级合并。"""
+    """$ref parameters should be expanded, and path-level parameters merged with operation-level ones."""
     ops = {o["operation_id"]: o for o in core.extract_operations(fixture_spec)}
     get_pet = ops["getPetById"]
     names = [p["name"] for p in get_pet["query_params"]]
-    assert "page" in names, "path 级 $ref 参数未被合并"
+    assert "page" in names, "path-level $ref parameter was not merged"
     assert [p["name"] for p in get_pet["path_params"]] == ["petId"]
 
 
@@ -79,7 +79,7 @@ def test_auth_and_pagination_detected(fixture_spec):
     assert {"fixture_key", "fixture_oauth"} <= schemes
     ops = {o["operation_id"]: o for o in core.extract_operations(fixture_spec)}
     assert ops["getPetById"]["paginated"] is True
-    assert ops["deletePet"]["security"], "operation 级 security 未被保留"
+    assert ops["deletePet"]["security"], "operation-level security was not preserved"
 
 
 def test_relative_base_url_is_completed_with_origin():
@@ -97,14 +97,14 @@ def test_relative_base_url_is_completed_with_origin():
 
 
 def test_relative_base_url_without_leading_slash_gets_separator():
-    """回归 v1 缺陷：servers.url='v3' 曾被拼成 https://hostv3。"""
+    """Regression for the v1 defect: servers.url='v3' was concatenated into https://hostv3."""
     spec = {"servers": [{"url": "v3"}]}
     assert core.resolve_base_url(spec, "https://host.example.com/spec.json") == "https://host.example.com/v3"
 
 
 # ----------------------------- MCPize -------------------------------------- #
 def test_weird_placeholder_codegen_compiles(fixture_spec):
-    """回归 v1 缺陷：{account-id} 曾被原样塞进 f-string，生成文件 NameError。"""
+    """Regression for the v1 defect: {account-id} went into an f-string verbatim, so the generated file raised NameError."""
     code = core.tool_code_from_spec(fixture_spec, "getWeirdBalance")
     assert "f\"" not in code.split("_PATH_")[0]
     compile(code, "generated.py", "exec")
@@ -156,7 +156,7 @@ def test_manifest_has_tool_schemas_and_pricing(fixture_spec):
     assert manifest["listing"]["auth"]["required"] is True
 
 
-# ----------------------------- 安全边界 ------------------------------------ #
+# ----------------------------- security boundaries ------------------------------------ #
 @pytest.mark.parametrize("name", ["../escape", "a/b", "", ".", "x" * 65])
 def test_output_name_whitelist_rejects_unsafe(name, tmp_path):
     with pytest.raises(core.PathNotAllowed):
@@ -185,7 +185,7 @@ def test_ssrf_guard_blocks_non_public_targets(url):
         core.assert_public_url(url)
 
 
-# --------- SSRF 重定向绕过回归（实测复现过的真漏洞，必须锁死） --------------- #
+# --------- SSRF redirect bypass regression (a real reproduced vulnerability, must stay locked) --------------- #
 class _FakeResp:
     def __init__(self, status_code, headers=None, url="https://public.example/x", text=""):
         self.status_code = status_code
@@ -199,7 +199,7 @@ class _FakeResp:
 
 
 def _patch_httpx(monkeypatch, script, seen):
-    """把 httpx.AsyncClient 换成按脚本逐次应答的假客户端。"""
+    """Replace httpx.AsyncClient with a fake client that answers from a script, one hop at a time."""
 
     class FakeClient:
         def __init__(self, *a, **kw):
@@ -219,21 +219,21 @@ def _patch_httpx(monkeypatch, script, seen):
 
 
 def _patch_guard(monkeypatch):
-    """只判断公网的轻量守卫：真实守卫的地址判定已由上方的参数化用例覆盖。"""
+    """A lightweight public-only guard: real address classification is covered by the parameterized cases above."""
 
     def guard(url: str) -> None:
         if "127.0.0.1" in url or "localhost" in url or "169.254.169.254" in url:
-            raise ValueError(f"拒绝访问 {url}：解析到非公网地址")
+            raise ValueError(f"refused {url}: resolves to a non-public address")
 
     monkeypatch.setattr(core, "assert_public_url", guard)
 
 
 def test_redirect_to_internal_target_is_blocked(monkeypatch):
-    """回归真漏洞：公开 URL 302 到 127.0.0.1 时，防护曾整体失效。
+    """Regression for a real vulnerability: protection failed entirely when a public URL 302'd to 127.0.0.1.
 
-    httpx 的 follow_redirects=True 只在初始 URL 上校验一次，
-    因此一个公网地址只要 302 到内网/云元数据端点就能绕过 SSRF 防护。
-    本用例断言：第二跳被拦下，且内网请求根本没发出去。
+    httpx's follow_redirects=True validates only the initial URL,
+    so any public address that 302s to an internal or cloud metadata endpoint bypasses the SSRF guard.
+    This case asserts the second hop is blocked and that the internal request is never actually sent.
     """
     seen: list = []
     _patch_guard(monkeypatch)
@@ -250,11 +250,11 @@ def test_redirect_to_internal_target_is_blocked(monkeypatch):
         asyncio_run(core.request_with_validated_redirects("GET", "https://public.example/x"))
 
     assert "127.0.0.1" in str(ei.value)
-    assert seen == [("GET", "https://public.example/x")], "第二跳不应被真正请求"
+    assert seen == [("GET", "https://public.example/x")], "the second hop must not be requested"
 
 
 def test_redirect_to_metadata_endpoint_is_blocked(monkeypatch):
-    """同一类漏洞的云元数据变体：302 -> 169.254.169.254 必须被拦。"""
+    """Same vulnerability, cloud metadata variant: 302 -> 169.254.169.254 must be blocked."""
     seen: list = []
     _patch_guard(monkeypatch)
     _patch_httpx(
@@ -272,7 +272,7 @@ def test_redirect_to_metadata_endpoint_is_blocked(monkeypatch):
 
 
 def test_redirect_chain_is_followed_and_rewritten_semantics(monkeypatch):
-    """正常场景不能被误伤：公网 -> 公网跳转应正常跟随，303 改写为 GET。"""
+    """Legitimate traffic must not break: a public → public redirect should be followed, with 303 rewritten to GET."""
     seen: list = []
     _patch_guard(monkeypatch)
     _patch_httpx(
@@ -290,7 +290,7 @@ def test_redirect_chain_is_followed_and_rewritten_semantics(monkeypatch):
 
 
 def test_redirect_loop_is_aborted(monkeypatch):
-    """重定向环必须有界退出，不能把服务拖死。"""
+    """Redirect loops must exit within a bound instead of hanging the service."""
     seen: list = []
     _patch_guard(monkeypatch)
     _patch_httpx(
@@ -301,7 +301,7 @@ def test_redirect_loop_is_aborted(monkeypatch):
 
     with pytest.raises(ValueError) as ei:
         asyncio_run(core.request_with_validated_redirects("GET", "https://public.example/x"))
-    assert "重定向" in str(ei.value)
+    assert "redirect" in str(ei.value)
     assert len(seen) == core.MAX_REDIRECTS + 1
 
 
@@ -313,7 +313,7 @@ def test_read_outside_allowed_root_is_refused(tmp_path, monkeypatch):
         core.ensure_readable(str(outside))
 
 
-# ----------------------------- VERIFY 判定 --------------------------------- #
+# ----------------------------- VERIFY verdict --------------------------------- #
 @pytest.mark.parametrize(
     "status,expected_status,expected_passed",
     [
@@ -328,7 +328,7 @@ def test_read_outside_allowed_root_is_refused(tmp_path, monkeypatch):
     ],
 )
 def test_classify_response_is_not_always_true(status, expected_status, expected_passed):
-    """回归 v1 缺陷：任何响应（含 4xx/5xx）都曾被记为 reachable=True。"""
+    """Regression for the v1 defect: any response (including 4xx/5xx) was recorded as reachable=True."""
     got_status, got_passed = core.classify_response(status)
     assert (got_status, got_passed) == (expected_status, expected_passed)
 
@@ -344,7 +344,7 @@ def test_metering_records_and_invoice_math(tmp_path):
     assert rep["apis"]["demo"]["ok_calls"] == 4
     assert rep["apis"]["demo"]["operations"][0]["calls"] == 5
 
-    # basic 档：10000 次额度，2.0 / 1000 次。10 万次 -> 9 万超额 -> 180.0
+    # basic tier: 10000 calls included, 2.0 per 1000. 100k calls -> 90k overage -> 180.0
     inv = meter.simulate_invoice("demo", "basic", basis="actual", projected_calls=100_000)
     assert inv["billable_overage_calls"] == 90_000
     assert inv["amount_due"] == 180.0
@@ -355,7 +355,7 @@ def test_metering_survives_corrupt_file(tmp_path):
     path.write_text("{ this is not json", encoding="utf-8")
     meter = metering.UsageMeter(path)
     assert meter.report()["total_calls_all_apis"] == 0
-    assert (tmp_path / "usage.corrupt.json").exists(), "损坏文件应留档而非静默丢弃"
+    assert (tmp_path / "usage.corrupt.json").exists(), "a corrupt file must be kept aside, not silently dropped"
 
 
 def test_registry_persists_atomically_and_warns_on_overwrite(tmp_path, fixture_spec):
@@ -372,10 +372,10 @@ def test_registry_reports_unknown_operation_helpfully(tmp_path):
     reg = core.Registry(tmp_path / "registry.json")
     reg.register("demo", str(FIXTURE))
     res = reg.call("demo", "no-such-op", {})
-    assert "error" in res and "可用" in res["error"]
+    assert "error" in res and "available" in res["error"]
 
 
-# ----------------------------- 工具策展 ------------------------------------ #
+# ----------------------------- tool curation ------------------------------------ #
 def test_scope_filter_by_tag_and_method(fixture_spec):
     ops = core.extract_operations(fixture_spec)
     filtered = core.filter_operations(ops, {"include_tags": ["pet"], "include_methods": ["GET"]})

@@ -1,15 +1,15 @@
 """
-metering.py · MCPForge 计量与计费层（MONETIZE 阶段的真实落地）
+metering.py · MCPForge metering and billing layer (the real Monetize implementation)
 
-设计目标（针对对抗式复核发现的「MONETIZE 只是打印一个 dict」问题）：
-- 每一次经本服务发生的 API 调用都被真实计数并落盘，而不是事后编造数字。
-- 用量可查询（usage_report），可折算成账单（simulate_invoice），可用于配额判断。
-- 计费模型与价目表集中定义，可配置币种，不把任何加密资产写死为默认。
+Design goals (answering the adversarial finding that "Monetize is just printing a dict"):
+- Every API call made through this service is counted and persisted for real, not fabricated afterwards.
+- Usage is queryable (usage_report), convertible to an invoice (simulate_invoice), and usable for quota decisions.
+- The billing model and price table live in one place, with a configurable currency and no crypto asset hardcoded as the default.
 
-存储：与注册表同目录的 usage.json，原子写入（临时文件 + os.replace），
-     绝不因一次损坏读取就静默清空历史用量。
+Storage: usage.json next to the registry, written atomically (temp file + os.replace),
+         never silently wiped because one read hit a corrupt file.
 
-本模块不依赖 fastmcp，也不依赖 core，可独立单测。
+This module depends on neither fastmcp nor core, so it unit tests on its own.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from typing import Any, Optional
 
 SCHEMA_VERSION = "2.0"
 
-# 计费档位（每 1000 次调用）。集中定义，便于审计与调整。
+# Pricing tiers (per 1000 calls). Defined in one place for auditing and adjustment.
 PRICING_TIERS: dict[str, dict[str, Any]] = {
     "free": {"price_per_1k_calls": 0.0, "included_calls": 1000, "model": "free"},
     "basic": {"price_per_1k_calls": 2.0, "included_calls": 10000, "model": "pay-per-call"},
@@ -31,8 +31,8 @@ PRICING_TIERS: dict[str, dict[str, Any]] = {
     "enterprise": {"price_per_1k_calls": 25.0, "included_calls": 500000, "model": "pay-per-call"},
 }
 
-# 默认结算币种：可用环境变量覆盖。刻意不默认任何加密资产，
-# 以对齐「本作品仅作工程作品集，不参与代币投机」的合规口径。
+# Default settlement currency: overridable by environment variable. Deliberately defaults to no crypto asset,
+# matching the compliance stance that this is an engineering portfolio piece with no token speculation.
 DEFAULT_CURRENCY = os.getenv("MCPFORGE_CURRENCY", "USD")
 
 
@@ -41,21 +41,21 @@ def _default_usage_path() -> Path:
 
 
 class UsageMeter:
-    """调用用量计。JSON 落盘，原子写，损坏时保守恢复而非清空。"""
+    """Call usage meter. Persists to JSON, writes atomically, and recovers conservatively rather than wiping."""
 
     def __init__(self, path: Optional[Path] = None):
         self.path = Path(path or _default_usage_path())
         self._data: dict[str, Any] = {"schema_version": SCHEMA_VERSION, "apis": {}}
         self._load()
 
-    # ----------------------------- 持久化 ----------------------------- #
+    # ----------------------------- persistence ----------------------------- #
     def _load(self) -> None:
         if not self.path.exists():
             return
         try:
             loaded = json.loads(self.path.read_text(encoding="utf-8"))
         except Exception:
-            # 不静默清空：把损坏文件改名留档，再以空表继续，避免历史被无声抹掉。
+            # Never wipe silently: rename the corrupt file aside and continue with an empty table, so history is not quietly erased.
             try:
                 self.path.replace(self.path.with_suffix(".corrupt.json"))
             except Exception:
@@ -65,7 +65,7 @@ class UsageMeter:
             self._data = loaded
 
     def _save(self) -> None:
-        """原子写：先写同目录临时文件，再 os.replace 覆盖，避免进程中断留下截断 JSON。"""
+        """Atomic write: write a temp file in the same directory, then os.replace, so an interrupted process cannot leave truncated JSON."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=str(self.path.parent), suffix=".tmp")
         try:
@@ -79,7 +79,7 @@ class UsageMeter:
                 pass
             raise
 
-    # ----------------------------- 记账 ----------------------------- #
+    # ----------------------------- bookkeeping ----------------------------- #
     def record(
         self,
         api_name: str,
@@ -104,7 +104,7 @@ class UsageMeter:
         entry["ok_calls" if ok else "failed_calls"] += 1
         entry["last_seen"] = datetime.now(timezone.utc).isoformat()
 
-        # 按天分桶：支撑「观测速率 → 月度外推」这一真实计费概念
+        # Bucket by day: supports the real billing concept of "observed rate → monthly projection"
         daily = entry.setdefault("daily", {})
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         daily[today] = daily.get(today, 0) + 1
@@ -120,7 +120,7 @@ class UsageMeter:
             op["last_status"] = status_code
         self._save()
 
-    # ----------------------------- 查询 ----------------------------- #
+    # ----------------------------- queries ----------------------------- #
     def report(self, api_name: Optional[str] = None, days: Optional[int] = None) -> dict:
         apis = self._data.get("apis", {})
         if api_name:
@@ -128,7 +128,7 @@ class UsageMeter:
                 return {
                     "api": api_name,
                     "found": False,
-                    "message": f"暂无 {api_name!r} 的用量记录（注册并通过本服务调用后会开始计数）",
+                    "message": f"no usage recorded for {api_name!r} yet (counting starts once it is registered and called through this service)",
                 }
             scoped = {api_name: apis[api_name]}
         else:
@@ -179,12 +179,12 @@ class UsageMeter:
 
         return {
             "found": bool(out_apis),
-            "currency_note": f"计费币种：{DEFAULT_CURRENCY}（可用 MCPFORGE_CURRENCY 覆盖）",
+            "currency_note": f"billing currency: {DEFAULT_CURRENCY} (override with MCPFORGE_CURRENCY)",
             "total_calls_all_apis": grand_total,
             "apis": out_apis,
         }
 
-    # ----------------------------- 计费 ----------------------------- #
+    # ----------------------------- billing ----------------------------- #
     def simulate_invoice(
         self,
         api_name: str,
@@ -192,40 +192,40 @@ class UsageMeter:
         basis: str = "actual",
         projected_calls: int = 0,
     ) -> dict:
-        """把真实用量折算成账单。
+        """Convert real usage into an invoice.
 
-        计费基准（basis）：
-          actual            —— 按已记录的真实调用数出账（默认）
-          projected_monthly —— 把「观测到的日均调用量」外推到 30 天出账
-        也可用 projected_calls 直接指定一个要测算的调用量（用于容量/报价推演）。
+        Billing basis:
+          actual            → bill the recorded real call count (default)
+          projected_monthly → extrapolate the observed daily average to 30 days
+        projected_calls can also set a volume to model directly (capacity and quote modeling).
 
-        这个「观测速率 → 月度外推」正是真实 SaaS 计费的做法，
-        也让账单在演示场景下能给出有意义的数字，而不是永远为 0。
+        The "observed rate → monthly projection" step is how real SaaS billing works,
+        and it keeps the demo invoice meaningful instead of permanently 0.
         """
         tier = PRICING_TIERS.get(pricing_tier)
         if tier is None:
             return {
-                "error": f"未知计价档 {pricing_tier!r}",
+                "error": f"unknown pricing tier {pricing_tier!r}",
                 "available_tiers": sorted(PRICING_TIERS.keys()),
             }
         rep = self.report(api_name)
         if not rep.get("found"):
             return {
                 "api": api_name,
-                "error": f"暂无 {api_name!r} 的用量记录，无法出账。请先注册并调用后重试。",
+                "error": f"no usage recorded for {api_name!r}, cannot bill. Register and call it first, then retry.",
             }
 
         entry = rep["apis"][api_name]
         actual = entry["total_calls"]
         if projected_calls > 0:
             billable = projected_calls
-            basis_label = "指定调用量测算"
+            basis_label = "specified call volume"
         elif basis == "projected_monthly":
             billable = entry["projected_monthly_calls"]
-            basis_label = "按观测日均外推至 30 天"
+            basis_label = "extrapolated from the observed daily average to 30 days"
         else:
             billable = actual
-            basis_label = "实际已记录用量"
+            basis_label = "actual recorded usage"
 
         included = tier["included_calls"]
         overage = max(0, billable - included)
@@ -264,7 +264,7 @@ class UsageMeter:
             "amount_due": amount,
             "line_items": line_items,
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "note": "用量来自本服务真实计量（usage.json），非凭空估值；外推口径已在 billing_basis 标明。",
+            "note": "usage comes from real metering in this service (usage.json), not an estimate; the projection basis is stated in billing_basis.",
         }
 
     def reset(self, api_name: Optional[str] = None) -> dict:
@@ -278,7 +278,7 @@ class UsageMeter:
         return {"reset": removed, "api": api_name or "<all>"}
 
 
-# 模块级单例（与 core 的注册表同生命周期）
+# Module-level singleton (same lifecycle as the registry in core)
 _meter = UsageMeter()
 
 

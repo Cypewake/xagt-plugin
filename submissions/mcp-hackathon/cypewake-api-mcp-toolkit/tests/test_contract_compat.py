@@ -1,9 +1,9 @@
 """
-test_contract_compat.py · 契约签名兼容性与工具清单测试
+test_contract_compat.py · contract signature compatibility and tool inventory tests
 
-背景：交付规格第 6 项要求 call_registered_api(name, operation_id, **params)，
-而 FastMCP 4.0.3 原生拒绝 VAR_KEYWORD 签名。本文件既锁住绕行方案有效，
-也用一条用例把这个框架限制本身记录在案，避免后来者重新踩坑。
+Background: delivery spec item 6 requires call_registered_api(name, operation_id, **params),
+while FastMCP 4.0.3 natively rejects a VAR_KEYWORD signature. This file locks in that the workaround works
+and records the framework limitation itself as a test, so nobody rediscovers it the hard way.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from fastmcp import Client, FastMCP
 import server
 from fastmcp_kwargs import PARAMS_KEY, make_kwargs_tool, merge_params
 
-# 契约 §4 点名的 7 项工具，名字必须完全一致
+# The 7 tools named in contract section 4 must match exactly
 CONTRACT_REQUIRED_TOOLS = {
     "call_rest_api",
     "parse_openapi_spec",
@@ -40,22 +40,22 @@ def _tool_names() -> list[str]:
 def test_all_contract_required_tools_exist():
     names = set(_tool_names())
     missing = CONTRACT_REQUIRED_TOOLS - names
-    assert not missing, f"契约要求的工具缺失：{sorted(missing)}"
+    assert not missing, f"tools required by the contract are missing: {sorted(missing)}"
 
 
 def test_fastmcp_natively_rejects_kwargs_tools():
-    """把这个框架限制固化为可执行的事实，说明绕行为何必要。"""
+    """Pin this framework limitation as an executable fact, documenting why the workaround is necessary."""
     probe = FastMCP("probe")
 
     with pytest.raises(ValueError, match=r"\*\*kwargs"):
 
         @probe.tool()
-        async def bad(name: str, **params):  # pragma: no cover - 仅用于触发限制
+        async def bad(name: str, **params):  # pragma: no cover - only used to trigger the limitation
             return {}
 
 
 def test_kwargs_tool_accepts_flat_and_nested_params():
-    """契约字面写法（扁平）与等价写法（params 对象）必须都走通。"""
+    """Both the literal contract form (flat) and the equivalent form (params object) must work."""
     captured: dict = {}
 
     async def impl(name: str, operation_id: str, params=None, **extra) -> dict:
@@ -86,9 +86,9 @@ def test_kwargs_tool_accepts_flat_and_nested_params():
 
     schema, flat, nested = asyncio.run(run())
 
-    assert schema["additionalProperties"] is True, "必须允许额外属性，否则契约签名的语义无法表达"
-    assert flat["merged"] == {"petId": 1}, "扁平写法（契约字面）未生效"
-    assert nested["merged"] == {"petId": 2}, "params 对象写法未生效"
+    assert schema["additionalProperties"] is True, "extra attributes must be allowed, otherwise the contract signature cannot be expressed"
+    assert flat["merged"] == {"petId": 1}, "the flat form (literal contract) did not take effect"
+    assert nested["merged"] == {"petId": 2}, "the params object form did not take effect"
 
 
 def test_flat_params_override_nested():
@@ -116,7 +116,7 @@ def test_health_check_shape():
 
 
 def test_server_tools_are_async():
-    """所有常规工具必须是协程，避免同步 IO 阻塞事件循环（v1 的缺陷）。"""
+    """Every regular tool must be a coroutine, so synchronous IO cannot block the event loop (the v1 defect)."""
     for name in ("verify_api", "call_rest_api", "parse_openapi_spec", "generate_mcp_bundle"):
         fn = getattr(server, name)
-        assert inspect.iscoroutinefunction(fn), f"{name} 不是协程函数"
+        assert inspect.iscoroutinefunction(fn), f"{name} is not a coroutine function"

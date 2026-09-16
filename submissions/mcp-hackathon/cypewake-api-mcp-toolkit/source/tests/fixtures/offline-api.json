@@ -3,7 +3,7 @@
   "info": {
     "title": "Offline Fixture API",
     "version": "1.0.0",
-    "description": "MCPForge 离线测试用夹具：形状对齐 Swagger Petstore，但不依赖任何网络。"
+    "description": "MCPForge offline test fixture: shaped like Swagger Petstore but dependent on no network."
   },
   "servers": [{ "url": "/api/v3" }],
   "components": {
@@ -12,7 +12,7 @@
         "name": "page",
         "in": "query",
         "required": false,
-        "description": "页码（用于验证 path 级 parameters 的 $ref 合并）",
+        "description": "Page number (used to verify $ref merging of path-level parameters)",
         "schema": { "type": "integer" }
       }
     },
@@ -29,14 +29,14 @@
       "parameters": [{ "$ref": "#/components/parameters/PageParam" }],
       "get": {
         "operationId": "getPetById",
-        "summary": "按 ID 取宠物",
+        "summary": "Get a pet by ID",
         "tags": ["pet"],
         "parameters": [
           {
             "name": "petId",
             "in": "path",
             "required": true,
-            "description": "宠物 ID",
+            "description": "Pet ID",
             "schema": { "type": "integer" }
           }
         ],
@@ -44,7 +44,7 @@
       },
       "delete": {
         "operationId": "deletePet",
-        "summary": "删除宠物",
+        "summary": "Delete a pet",
         "security": [{ "fixture_key": [] }],
         "responses": { "200": { "description": "ok" } }
       }
@@ -52,7 +52,7 @@
     "/pet": {
       "post": {
         "operationId": "addPet",
-        "summary": "新增宠物",
+        "summary": "Add a pet",
         "requestBody": {
           "content": { "application/json": { "schema": { "type": "object" } }
           }
@@ -63,14 +63,14 @@
     "/store/inventory": {
       "get": {
         "operationId": "getInventory",
-        "summary": "库存统计",
+        "summary": "Inventory totals",
         "responses": { "200": { "description": "ok" } }
       }
     },
     "/weird/{account-id}/balance": {
       "get": {
         "operationId": "getWeirdBalance",
-        "summary": "含非标识符占位符的路径",
+        "summary": "A path containing a non-identifier placeholder",
         "parameters": [
           {
             "name": "account-id",

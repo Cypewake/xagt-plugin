@@ -1,10 +1,10 @@
 # Verification evidence
 
-复制本文件至 `submissions/mcp-hackathon/cypewake-api-mcp-toolkit/verification/README.md` 并替换占位符。
+Commands below run against the live deployment and need no credentials.
 
 ## Prerequisites
 
-- Review commit: `41ed4e5160e52fc51908c6bbc648d325a2d685de`
+- Review commit: `92c6032240e7ef105cce50230f49aa353cf8ccda`
 - API base URL: `https://mcpforge-cypewake.app.workbuddy.host`
 - Authentication: none
 
@@ -17,7 +17,7 @@ curl --fail --silent --show-error https://mcpforge-cypewake.app.workbuddy.host/a
 Expected response:
 
 ```json
-{"status":"ok","commit":"41ed4e5160e52fc51908c6bbc648d325a2d685de"}
+{"status":"ok","commit":"92c6032240e7ef105cce50230f49aa353cf8ccda"}
 ```
 
 ## 2. Deployment proof
@@ -29,17 +29,28 @@ curl --fail --silent --show-error https://mcpforge-cypewake.app.workbuddy.host/.
 Expected response:
 
 ```json
-{"schemaVersion":1,"slug":"cypewake-api-mcp-toolkit","commit":"41ed4e5160e52fc51908c6bbc648d325a2d685de"}
+{"schemaVersion":1,"slug":"cypewake-api-mcp-toolkit","commit":"92c6032240e7ef105cce50230f49aa353cf8ccda"}
 ```
 
 ## 3. Capability call
 
-评审可本地 `uvicorn demo_app:app --port 8000` 后，用任意 MCP 客户端（或 `source/docs/judge_check.py`）复现真实能力调用：
+Run the service locally with `uvicorn demo_app:app --port 8000`, then reproduce the real capability calls with any MCP client or with `source/docs/judge_check.py`:
 
-- `call_rest_api`：`base_url=https://api.github.com`、`path=/zen` → HTTP 200
-- `register(github_live)` + `call_registered_api(getZen)` → HTTP 200
+- `call_rest_api` with `base_url=https://api.github.com`, `path=/zen` → HTTP 200
+- `register(github_live)` followed by `call_registered_api(getZen)` → HTTP 200
 
-完整可复现脚本见 `source/docs/judge_check.py`（本地稳定运行 **11/11 PASS**）。
+The full reproducible script is `source/docs/judge_check.py`, which reports **11/11 PASS** locally.
 
-预期成功响应：HTTP 200，body 含 GitHub zen 文案或仓库元数据。
-预期安全失败：传入未注册 API 名 → 明确错误；传入内网 URL → 被 `assert_public_url` 拒绝（防 SSRF）。
+Expected success: HTTP 200 with the GitHub zen text or repository metadata in the body.
+
+Expected safe failures: an unregistered API name returns an explicit error; a private-network URL is rejected by `assert_public_url` (SSRF guard).
+
+## 4. Real task call
+
+```bash
+curl --fail --silent --show-error -X POST \
+  https://mcpforge-cypewake.app.workbuddy.host/api/real-task \
+  -H 'Content-Type: application/json' -d '{"topic":"model-context-protocol"}'
+```
+
+Returns the three-step chain: search candidates, verify each at the source, aggregate the brief — with the status code of every real call. When the host blocks outbound access to `api.github.com`, the response falls back to the recorded evidence snapshot and labels the data source rather than returning an empty result.

@@ -1,19 +1,19 @@
 """
-demo_app.py · MCPForge 可视化演示 + MCP 端点（同一个进程）
+demo_app.py · MCPForge visual demo + MCP endpoint (same process)
 
-设计要点（针对对抗式复核的两条发现）：
-1. 「demo 要起两个进程、5 分钟内来不及」→ 本文件把 FastMCP 的 streamable-http
-   ASGI 应用挂载到 /mcp，于是**一条命令**同时提供：
-     - 可视化四阶段走查页（/）
-     - 健康检查（/api/health）
-     - 真正可被 MCP 客户端调用的端点（/mcp）
-2. 「零部署、无在线端点」→ 因为只有一个进程、只暴露一个端口，
-   可以整体发布成一个公开链接，既满足 deploy-and-validate 硬门槛，
-   也顺带给出可现场调用的 MCP 端点。
+Design notes (addressing two findings from the adversarial review):
+1. "the demo needs two processes and cannot be up in 5 minutes" → this file mounts FastMCP's streamable-http
+   ASGI app at /mcp, so **one command** serves:
+     - the four-stage walkthrough page (/)
+     - the health check (/api/health)
+     - an endpoint a real MCP client can call (/mcp)
+2. "no deployment, no live endpoint" → because there is one process and one port,
+   the whole thing publishes as a single public link, satisfying the deploy-and-validate gate
+   and handing reviewers an MCP endpoint they can call on the spot.
 
-运行：
+Run:
     uvicorn demo_app:app --host 0.0.0.0 --port 8000
-    # 生产/发布：uvicorn demo_app:app --host 0.0.0.0 --port $PORT
+    # production/publish: uvicorn demo_app:app --host 0.0.0.0 --port $PORT
 """
 
 from __future__ import annotations
@@ -31,13 +31,13 @@ import core
 import metering
 import server
 
-# 演示用默认 API（公开、免密钥）。可用环境变量覆盖。
+# Demo default API (public, keyless). Override with an environment variable.
 DEFAULT_SPEC = os.getenv(
     "MCPFORGE_DEMO_SPEC", "https://petstore3.swagger.io/api/v3/openapi.json"
 )
 
-# 评审要求的「审查 commit」：从环境变量或本地文件读取。
-# 注意：该值不写入 git 历史，以免改变源码 SHA（SHA 必须对应部署版本）。
+# The "review commit" the review requires: read from an env var or a local file.
+# Note: this value never enters git history, so the source SHA does not shift (the SHA must match the deployed build).
 def _resolve_review_commit() -> str:
     env = os.getenv("REVIEW_COMMIT")
     if env and env.strip():
@@ -48,24 +48,24 @@ def _resolve_review_commit() -> str:
     return "unpinned"
 
 
-# 把 FastMCP 的 streamable-http 应用挂到 /mcp，让本进程同时就是 MCP 服务端。
+# Mount FastMCP's streamable-http app at /mcp so this process is also the MCP server.
 _mcp_asgi = server.mcp.http_app(path="/", transport="http")
 
 app = FastAPI(
     title="MCPForge",
     version=core.VERSION,
-    description="API→MCP 全链路工厂：Build → Verify → MCPize → Monetize",
+    description="API-to-MCP factory: Build → Verify → MCPize → Monetize",
     lifespan=_mcp_asgi.lifespan,
 )
 app.mount("/mcp", _mcp_asgi)
 
 
-# ------------------------------- 健康与元信息 ------------------------------- #
+# ------------------------------- health and metadata ------------------------------- #
 @app.get("/api/health")
 async def api_health() -> dict:
-    """健康检查（提交要求的 live 证据）：返回 status=ok 即代表服务在线可调用。
+    """Health check (the live evidence the submission requires): status=ok means online and callable.
 
-    官方硬门槛要求：必须回传精确审查 commit，自动化 gate 会校验。
+    The official hard gate requires returning the exact review commit; automated gates check it.
     """
     health = core.health_check()
     health["service"] = "MCPForge-demo"
@@ -77,9 +77,9 @@ async def api_health() -> dict:
 
 @app.get("/.well-known/xagent-verification.json")
 async def xagent_verification() -> dict:
-    """部署证明端点（官方硬门槛）：同 API 源暴露 slug + 精确审查 commit。
+    """Deployment proof endpoint (official hard gate): exposes slug + exact review commit from the same API.
 
-    自动化 gate 会校验该端点回传的 slug 与 commit 是否与提交声明一致。
+    Automated gates check that the slug and commit returned here match the submission declaration.
     """
     return {
         "schemaVersion": 1,
@@ -135,7 +135,7 @@ async def api_mcpize(payload: dict) -> Any:
 
 @app.post("/api/preview-scope")
 async def api_preview_scope(payload: dict) -> Any:
-    """预览 scope 策展效果：原始端点数、过滤后工具数、推荐维度。"""
+    """Preview scope curation: raw endpoint count, filtered tool count, recommended dimensions."""
     spec_source = payload.get("spec_source") or DEFAULT_SPEC
     return await core.preview_scope_async(spec_source, payload.get("scope"))
 
@@ -178,7 +178,7 @@ async def api_invoice(payload: dict) -> Any:
     )
 
 
-# ------------------------------ 注册与调用 ------------------------------- #
+# ------------------------------ register and call ------------------------------- #
 @app.post("/api/register")
 async def api_register(payload: dict) -> Any:
     return await core._registry.register_async(
@@ -211,7 +211,7 @@ async def api_registry() -> Any:
 
 @app.post("/api/full-pipeline")
 async def api_full_pipeline(payload: dict) -> Any:
-    """一键跑完整条流水线，供页面上「全流程」按钮与评审快速走查使用。"""
+    """Run the whole pipeline in one call, for the page's full-run button and quick reviewer walkthroughs."""
     spec_source = payload.get("spec_source") or DEFAULT_SPEC
     name = payload.get("name") or "petstore"
     tier = payload.get("pricing_tier") or "basic"
@@ -243,7 +243,7 @@ async def api_full_pipeline(payload: dict) -> Any:
     reg = await core._registry.register_async(name, spec_source)
     steps["register"] = reg
 
-    # 真实调用一次，让计量有数据、出账才有意义（否则账单永远是 0）
+    # Make one real call so metering has data and the invoice means something (otherwise it is always 0)
     call_step: dict[str, Any] = {"attempted": False}
     entry = core._registry.get(name) or {}
     for op in entry.get("operations", []):
@@ -276,11 +276,11 @@ async def api_full_pipeline(payload: dict) -> Any:
 
 
 def _load_cached_task_evidence() -> dict:
-    """读取离线环境真实跑出的任务证据，供线上出网受限时回退展示。
+    """Load task evidence captured in an offline environment, for fallback when the host blocks outbound traffic.
 
-    为什么需要：部分云沙箱会把公网域名解析到保留网段（如 198.18.x.x），
-    被 SSRF 防护判为非公网而拒绝。此时若直接返回空结果，评审会误以为
-    能力本身不可用。回退到已留存的真实快照，并如实标注来源。
+    Why this exists: some cloud sandboxes resolve public domains into reserved ranges (for example 198.18.x.x),
+    which the SSRF guard classifies as non-public and refuses. Returning an empty result there would make
+    reviewers think the capability itself is broken. Falling back to a recorded real snapshot and labelling it is honest.
     """
     p = Path(__file__).parent / "examples" / "real_agent_task_result.json"
     try:
@@ -291,13 +291,13 @@ def _load_cached_task_evidence() -> dict:
 
 @app.post("/api/real-task")
 async def api_real_task(payload: dict) -> Any:
-    """跑一个「真实任务」：为某个技术主题生成选型简报。
+    """Run a real task: produce a selection brief for a technical topic.
 
-    评审最关心的是「这东西到底能不能替 agent 干成一件真事」，所以这里不是
-    单步探针，而是三步编排：检索候选 → 逐个核实 → 聚合出简报。
+    Reviewers care most about whether this actually finishes a real job for an agent, so this is a
+    three-step chain rather than a single probe: search → verify each candidate → aggregate a brief.
 
-    每步都是真实 HTTP，并如实回传状态码与失败原因（限流 / 404 不粉饰），
-    因为「错误行为是否诚实」本身就是能力质量的一部分。
+    Every step is a real HTTP call and reports status codes and failure reasons as they are (rate limits and 404s stay visible),
+    because honest error behavior is part of capability quality.
     """
     topic = payload.get("topic") or "model-context-protocol"
     top_n = int(payload.get("top_n") or 3)
@@ -309,7 +309,7 @@ async def api_real_task(payload: dict) -> Any:
 
     await core._registry.register_async(name, spec_source)
 
-    # 步骤 1：检索候选
+    # Step 1: search for candidates
     s = await core._registry.call_async(
         name, "searchRepositories",
         {"q": topic, "sort": "stars", "order": "desc", "per_page": 5},
@@ -317,14 +317,14 @@ async def api_real_task(payload: dict) -> Any:
     items = (s.get("data") or {}).get("items") or []
     candidates = [it.get("full_name") for it in items[:top_n] if it.get("full_name")]
     out["steps"].append({
-        "step": 1, "action": "检索候选", "tool": "searchRepositories",
+        "step": 1, "action": "search candidates", "tool": "searchRepositories",
         "status_code": s.get("status_code"), "ok": s.get("ok"),
         "error": s.get("error"),
-        "summary": f"召回 {len(items)} 个候选，取前 {len(candidates)} 个",
+        "summary": f"recalled {len(items)} candidates, taking the first {len(candidates)}",
         "candidates": candidates,
     })
 
-    # 步骤 2：逐个核实（搜索摘要可能过期，必须回源核实实时指标）
+    # Step 2: verify each one (search summaries go stale, so real metrics must come from the source)
     verified: list[dict[str, Any]] = []
     for fn in candidates:
         if "/" not in fn:
@@ -346,39 +346,39 @@ async def api_real_task(payload: dict) -> Any:
         })
     verified.sort(key=lambda x: x.get("stars") or 0, reverse=True)
     out["steps"].append({
-        "step": 2, "action": "核实实时指标", "tool": "getRepository",
-        "summary": f"核实 {len(verified)} 个仓库", "repos": verified,
+        "step": 2, "action": "verify live metrics", "tool": "getRepository",
+        "summary": f"verified {len(verified)} repositories", "repos": verified,
     })
 
-    # 步骤 3：聚合简报。线上出网被拦截时回退到真实证据快照，避免评审看到空结果。
+    # Step 3: aggregate the brief. Fall back to the recorded snapshot when outbound is blocked, so reviewers never see an empty result.
     if verified:
         out["source"] = "live"
         out["brief"] = {
             "top_pick": verified[0]["full_name"],
             "ranking": verified,
-            "note": "数据来自 GitHub 实时 API，非模型记忆",
+            "note": "data from the live GitHub API, not model memory",
         }
     else:
         cached = _load_cached_task_evidence()
         out["source"] = "cached_evidence" if cached else "unavailable"
         out["degraded_reason"] = (
-            out["steps"][0].get("error") or "当前环境无法访问 api.github.com"
+            out["steps"][0].get("error") or "this environment cannot reach api.github.com"
         )
         cbrief = cached.get("brief") or {}
         out["brief"] = {
             "top_pick": cbrief.get("top_pick"),
             "ranking": cached.get("step2_verify_details") or [],
-            "note": ("线上环境出网受限，展示离线环境真实跑出的证据快照"
-                     if cached else "无可用证据"),
+            "note": ("outbound access is restricted here; showing the snapshot captured in an offline environment"
+                     if cached else "no evidence available"),
         }
     out["steps"].append({
         "step": 3,
-        "action": "聚合简报" + ("（回退离线证据）" if out["source"] == "cached_evidence" else ""),
-        "tool": "本地聚合",
-        "summary": f"首选 {out['brief']['top_pick']}",
+        "action": "aggregate brief" + (" (offline evidence fallback)" if out["source"] == "cached_evidence" else ""),
+        "tool": "local aggregation",
+        "summary": f"top pick {out['brief']['top_pick']}",
     })
 
-    # 计费：实际口径 + 规模化口径（只给实际账单会恒为 0）
+    # Billing: actual basis + scaled basis (actual alone is always 0)
     rep = metering.get_meter().report(name)
     usage = (rep.get("apis") or {}).get(name) or {}
     out["billing"] = {
@@ -391,15 +391,15 @@ async def api_real_task(payload: dict) -> Any:
     return out
 
 
-# --------------------------------- 页面 ---------------------------------- #
+# --------------------------------- page ---------------------------------- #
 def _index_html() -> str:
     path = Path(__file__).parent / "static" / "index.html"
     if path.exists():
         return path.read_text(encoding="utf-8")
     return (
         "<html><body style='font-family:sans-serif;padding:40px'>"
-        "<h1>MCPForge</h1><p>static/index.html 缺失，但 JSON API 与 /mcp 端点正常。"
-        "可访问 <code>/api/health</code> 验证。</p></body></html>"
+        "<h1>MCPForge</h1><p>static/index.html is missing, but the JSON API and /mcp endpoint work. "
+        "Visit <code>/api/health</code> to verify.</p></body></html>"
     )
 
 
@@ -409,14 +409,14 @@ async def index() -> HTMLResponse:
 
 
 # --------------------------------------------------------------------------- #
-# 绝对路径请求目标归一化（兼容性加固）
+# Normalize absolute-form request targets (compatibility hardening)
 #
-# FastMCP 4.x 在 mode="auto" 的现代协议协商通过后，部分后续请求会以
-# 「绝对形式请求目标」(RFC 7230 absolute-form，形如 http://host:port/mcp/)
-# 发到本服务。Starlette/FastAPI 不会拿完整 URL 去匹配路由，于是这些请求
-# 落到 /mcp 端点时变成 404。这里在 ASGI 层把绝对形式目标规整成相对路径
-# （/mcp/），既不影响标准 MCP 客户端（它们本就发相对路径），又让默认
-# fastmcp.Client(url) 也能直接连通。属于防御性兼容，不改变任何业务路由。
+# With FastMCP 4.x, once mode="auto" negotiates the modern protocol, some follow-up requests arrive
+# using an absolute-form request target (RFC 7230 absolute-form, e.g. http://host:port/mcp/).
+# Starlette/FastAPI do not match routes against a full URL, so those requests reach /mcp as a 404.
+# This normalizes absolute-form targets back to relative paths (/mcp/) at the ASGI layer,
+# which leaves standard MCP clients untouched (they already send relative paths) while letting the default
+# fastmcp.Client(url) connect directly. Defensive compatibility only; it changes no business route.
 # --------------------------------------------------------------------------- #
 _root_app = app
 
