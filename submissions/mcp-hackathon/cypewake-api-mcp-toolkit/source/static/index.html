@@ -380,8 +380,15 @@ $('runrealtask').addEventListener('click', async () => {
         ).join('') + '</div>'
       : '';
     const b = d.billing || {};
+    const live = d.source === 'live';
     stat('realtask', (d.steps || []).length + ' 步完成 · 规模化 100 万次/月 ≈ ' +
-      ((b.invoice_scaled_1m || {}).amount_due ?? '—') + ' USD', 'ok');
+      ((b.invoice_scaled_1m || {}).amount_due ?? '—') + ' USD · ' +
+      (live ? '实时调用' : '离线证据快照'), live ? 'ok' : 'warn');
+    if (!live && d.degraded_reason) {
+      $('realtask-brief').insertAdjacentHTML('beforeend',
+        '<div class="hint" style="color:var(--warn)">线上环境出网受限，已回退到真实证据快照：' +
+        d.degraded_reason + '</div>');
+    }
     show('realtask', d);
   } catch (e) {
     stat('realtask', '失败：' + e.message, 'bad');
