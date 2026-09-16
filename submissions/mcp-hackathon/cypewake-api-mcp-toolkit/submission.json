@@ -3,8 +3,8 @@
   "name": "MCPForge",
   "slug": "cypewake-api-mcp-toolkit",
   "sourceRepository": "https://github.com/cypewake/xagt-plugin",
-  "reviewCommit": "<REVIEW_COMMIT>",
-  "apiBaseUrl": "<DEPLOY_URL>",
-  "healthCheckUrl": "<DEPLOY_URL>/api/health",
-  "deploymentProofUrl": "<DEPLOY_URL>/.well-known/xagent-verification.json"
+  "reviewCommit": "41ed4e5160e52fc51908c6bbc648d325a2d685de",
+  "apiBaseUrl": "https://mcpforge-cypewake.app.workbuddy.host",
+  "healthCheckUrl": "https://mcpforge-cypewake.app.workbuddy.host/api/health",
+  "deploymentProofUrl": "https://mcpforge-cypewake.app.workbuddy.host/.well-known/xagent-verification.json"
 }

@@ -4,32 +4,32 @@
 
 ## Prerequisites
 
-- Review commit: `<REVIEW_COMMIT>`
-- API base URL: `<DEPLOY_URL>`
+- Review commit: `41ed4e5160e52fc51908c6bbc648d325a2d685de`
+- API base URL: `https://mcpforge-cypewake.app.workbuddy.host`
 - Authentication: none
 
 ## 1. Health check
 
 ```bash
-curl --fail --silent --show-error <DEPLOY_URL>/api/health
+curl --fail --silent --show-error https://mcpforge-cypewake.app.workbuddy.host/api/health
 ```
 
 Expected response:
 
 ```json
-{"status":"ok","commit":"<REVIEW_COMMIT>"}
+{"status":"ok","commit":"41ed4e5160e52fc51908c6bbc648d325a2d685de"}
 ```
 
 ## 2. Deployment proof
 
 ```bash
-curl --fail --silent --show-error <DEPLOY_URL>/.well-known/xagent-verification.json
+curl --fail --silent --show-error https://mcpforge-cypewake.app.workbuddy.host/.well-known/xagent-verification.json
 ```
 
 Expected response:
 
 ```json
-{"schemaVersion":1,"slug":"cypewake-api-mcp-toolkit","commit":"<REVIEW_COMMIT>"}
+{"schemaVersion":1,"slug":"cypewake-api-mcp-toolkit","commit":"41ed4e5160e52fc51908c6bbc648d325a2d685de"}
 ```
 
 ## 3. Capability call
