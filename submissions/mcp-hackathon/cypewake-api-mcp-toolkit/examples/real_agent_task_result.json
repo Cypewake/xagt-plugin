@@ -1,0 +1,314 @@
+{
+  "task": "生成「model-context-protocol」技术选型简报",
+  "topic": "model-context-protocol",
+  "verify": {
+    "total_operations": 5,
+    "filtered_operations": 5,
+    "passed": 5,
+    "verified": 5,
+    "verdict": "全部通过",
+    "detail": [
+      {
+        "operation_id": "getZen",
+        "http_status": 200,
+        "passed": true,
+        "latency_ms": 576.5
+      },
+      {
+        "operation_id": "getRateLimit",
+        "http_status": 200,
+        "passed": true,
+        "latency_ms": 327.8
+      },
+      {
+        "operation_id": "listPublicEvents",
+        "http_status": 200,
+        "passed": true,
+        "latency_ms": 857.0
+      },
+      {
+        "operation_id": "searchRepositories",
+        "http_status": 200,
+        "passed": true,
+        "latency_ms": 716.6
+      },
+      {
+        "operation_id": "getRepository",
+        "http_status": 200,
+        "passed": true,
+        "latency_ms": 651.0
+      }
+    ]
+  },
+  "step1_search": {
+    "status_code": 200,
+    "ok": true,
+    "returned": 5,
+    "data_truncated": false,
+    "candidates": [
+      {
+        "full_name": "modelcontextprotocol/servers",
+        "stars_at_search": 90384
+      },
+      {
+        "full_name": "HKUDS/nanobot",
+        "stars_at_search": 48216
+      },
+      {
+        "full_name": "DeusData/codebase-memory-mcp",
+        "stars_at_search": 43513
+      }
+    ]
+  },
+  "step2_verify_details": [
+    {
+      "status_code": 200,
+      "ok": true,
+      "full_name": "modelcontextprotocol/servers",
+      "stars": 90384,
+      "forks": 11640,
+      "open_issues": 536,
+      "language": "TypeScript",
+      "pushed_at": "2026-09-03T01:42:26Z",
+      "description": "Model Context Protocol Servers"
+    },
+    {
+      "status_code": 200,
+      "ok": true,
+      "full_name": "HKUDS/nanobot",
+      "stars": 48216,
+      "forks": 8523,
+      "open_issues": 784,
+      "language": "Python",
+      "pushed_at": "2026-09-16T10:00:58Z",
+      "description": "Ultra-lightweight, open-source, self-hosted personal AI agent framework in Python with WebUI, tools, memory, MCP, multi-"
+    },
+    {
+      "status_code": 200,
+      "ok": true,
+      "full_name": "DeusData/codebase-memory-mcp",
+      "stars": 43513,
+      "forks": 3541,
+      "open_issues": 591,
+      "language": "C",
+      "pushed_at": "2026-09-16T02:32:40Z",
+      "description": "High-performance code intelligence MCP server. Indexes codebases into a persistent knowledge graph — average repo in mil"
+    }
+  ],
+  "brief": {
+    "generated_from": "GitHub 实时 API（非模型记忆）",
+    "top_pick": "modelcontextprotocol/servers",
+    "ranking": [
+      {
+        "rank": 1,
+        "status_code": 200,
+        "ok": true,
+        "full_name": "modelcontextprotocol/servers",
+        "stars": 90384,
+        "forks": 11640,
+        "open_issues": 536,
+        "language": "TypeScript",
+        "pushed_at": "2026-09-03T01:42:26Z",
+        "description": "Model Context Protocol Servers"
+      },
+      {
+        "rank": 2,
+        "status_code": 200,
+        "ok": true,
+        "full_name": "HKUDS/nanobot",
+        "stars": 48216,
+        "forks": 8523,
+        "open_issues": 784,
+        "language": "Python",
+        "pushed_at": "2026-09-16T10:00:58Z",
+        "description": "Ultra-lightweight, open-source, self-hosted personal AI agent framework in Python with WebUI, tools, memory, MCP, multi-"
+      },
+      {
+        "rank": 3,
+        "status_code": 200,
+        "ok": true,
+        "full_name": "DeusData/codebase-memory-mcp",
+        "stars": 43513,
+        "forks": 3541,
+        "open_issues": 591,
+        "language": "C",
+        "pushed_at": "2026-09-16T02:32:40Z",
+        "description": "High-performance code intelligence MCP server. Indexes codebases into a persistent knowledge graph — average repo in mil"
+      }
+    ]
+  },
+  "usage_report": {
+    "found": true,
+    "currency_note": "计费币种：USD（可用 MCPFORGE_CURRENCY 覆盖）",
+    "total_calls_all_apis": 24,
+    "apis": {
+      "github_live": {
+        "total_calls": 24,
+        "ok_calls": 24,
+        "failed_calls": 0,
+        "success_rate": 1.0,
+        "first_seen": "2026-09-14T10:34:30.898747+00:00",
+        "last_seen": "2026-09-16T15:13:28.386778+00:00",
+        "active_days": 2,
+        "calls_per_day": 12.0,
+        "projected_monthly_calls": 360,
+        "daily": {
+          "2026-09-14": 12,
+          "2026-09-16": 12
+        },
+        "operations": [
+          {
+            "operation_id": "getRateLimit",
+            "calls": 4,
+            "ok": 4,
+            "failed": 0,
+            "avg_latency_ms": 499.1,
+            "success_rate": 1.0
+          },
+          {
+            "operation_id": "getRepository",
+            "calls": 9,
+            "ok": 9,
+            "failed": 0,
+            "avg_latency_ms": 569.3,
+            "success_rate": 1.0
+          },
+          {
+            "operation_id": "getZen",
+            "calls": 4,
+            "ok": 4,
+            "failed": 0,
+            "avg_latency_ms": 1933.1,
+            "success_rate": 1.0
+          },
+          {
+            "operation_id": "listPublicEvents",
+            "calls": 4,
+            "ok": 4,
+            "failed": 0,
+            "avg_latency_ms": 507.9,
+            "success_rate": 1.0
+          },
+          {
+            "operation_id": "searchRepositories",
+            "calls": 3,
+            "ok": 3,
+            "failed": 0,
+            "avg_latency_ms": 627.4,
+            "success_rate": 1.0
+          }
+        ]
+      }
+    }
+  },
+  "invoice_actual": {
+    "schema_version": "2.0",
+    "api": "github_live",
+    "pricing_tier": "pro",
+    "billing_model": "pay-per-call",
+    "currency": "USD",
+    "billing_basis": "实际已记录用量",
+    "metered_actual": {
+      "total_calls": 24,
+      "ok_calls": 24,
+      "failed_calls": 0,
+      "success_rate": 1.0,
+      "active_days": 2,
+      "calls_per_day": 12.0
+    },
+    "billable_calls": 24,
+    "included_calls": 50000,
+    "billable_overage_calls": 0,
+    "price_per_1k_calls": 8.0,
+    "amount_due": 0.0,
+    "line_items": [
+      {
+        "operation_id": "getRateLimit",
+        "actual_calls": 4,
+        "share_of_actual_calls": 0.167,
+        "projected_calls": 4
+      },
+      {
+        "operation_id": "getRepository",
+        "actual_calls": 9,
+        "share_of_actual_calls": 0.375,
+        "projected_calls": 9
+      },
+      {
+        "operation_id": "getZen",
+        "actual_calls": 4,
+        "share_of_actual_calls": 0.167,
+        "projected_calls": 4
+      },
+      {
+        "operation_id": "listPublicEvents",
+        "actual_calls": 4,
+        "share_of_actual_calls": 0.167,
+        "projected_calls": 4
+      },
+      {
+        "operation_id": "searchRepositories",
+        "actual_calls": 3,
+        "share_of_actual_calls": 0.125,
+        "projected_calls": 3
+      }
+    ],
+    "generated_at": "2026-09-16T15:13:28.446615+00:00",
+    "note": "用量来自本服务真实计量（usage.json），非凭空估值；外推口径已在 billing_basis 标明。"
+  },
+  "invoice_scaled": {
+    "schema_version": "2.0",
+    "api": "github_live",
+    "pricing_tier": "pro",
+    "billing_model": "pay-per-call",
+    "currency": "USD",
+    "billing_basis": "指定调用量测算",
+    "metered_actual": {
+      "total_calls": 24,
+      "ok_calls": 24,
+      "failed_calls": 0,
+      "success_rate": 1.0,
+      "active_days": 2,
+      "calls_per_day": 12.0
+    },
+    "billable_calls": 1000000,
+    "included_calls": 50000,
+    "billable_overage_calls": 950000,
+    "price_per_1k_calls": 8.0,
+    "amount_due": 7600.0,
+    "line_items": [
+      {
+        "operation_id": "getRateLimit",
+        "actual_calls": 4,
+        "share_of_actual_calls": 0.167,
+        "projected_calls": 166667
+      },
+      {
+        "operation_id": "getRepository",
+        "actual_calls": 9,
+        "share_of_actual_calls": 0.375,
+        "projected_calls": 375000
+      },
+      {
+        "operation_id": "getZen",
+        "actual_calls": 4,
+        "share_of_actual_calls": 0.167,
+        "projected_calls": 166667
+      },
+      {
+        "operation_id": "listPublicEvents",
+        "actual_calls": 4,
+        "share_of_actual_calls": 0.167,
+        "projected_calls": 166667
+      },
+      {
+        "operation_id": "searchRepositories",
+        "actual_calls": 3,
+        "share_of_actual_calls": 0.125,
+        "projected_calls": 125000
+      }
+    ],
+    "generated_at": "2026-09-16T15:13:28.446647+00:00",
+    "note": "用量来自本服务真实计量（usage.json），非凭空估值；外推口径已在 billing_basis 标明。"
+  }
+}

@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "GitHub 公共 REST API（MCPForge 样板）",
-    "version": "1.0.0",
-    "description": "真实、免密钥（未认证限流内可用）的高频开发者接口。agent 用来查仓库、查用户、查限流，是「agent 真正会调用」的典型 API。用于演示 MCPForge 的 Build → Verify → MCPize → Monetize 全链路。"
+    "version": "1.1.0",
+    "description": "真实、免密钥（未认证限流内可用）的高频开发者接口。覆盖 agent 的完整工作流：探测可达性 → 按主题检索 → 拉取具体指标做决策。用于演示 MCPForge 的 Build → Verify → MCPize → Monetize 全链路，并支撑一个真实任务「生成技术选型简报」——该任务依赖实时 star / issue 数据，纯 prompt 无法伪造。"
   },
   "servers": [
     { "url": "https://api.github.com" }
@@ -12,8 +12,8 @@
     "/zen": {
       "get": {
         "operationId": "getZen",
-        "summary": "格言",
-        "description": "返回一句设计格言，证明 API 可达。",
+        "summary": "格言探活",
+        "description": "返回一句设计格言，用于探活与连通性自检。",
         "responses": { "200": { "description": "ok" } }
       }
     },
@@ -29,8 +29,76 @@
       "get": {
         "operationId": "listPublicEvents",
         "summary": "公开事件流",
-        "description": "返回全网公开事件，agent 用它做活动监听/趋势感知。",
+        "description": "返回全网公开事件，agent 用它做活动监听与趋势感知。",
         "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/search/repositories": {
+      "get": {
+        "operationId": "searchRepositories",
+        "summary": "按主题检索仓库",
+        "description": "返回匹配关键词的仓库列表（含 star 数、简介）。这是技术选型调研的第一步；结果随真实世界变化，纯 prompt 无法凭记忆给出。",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "example": "MCP" },
+            "description": "检索关键词，如 MCP、agents、llm"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "example": "stars" },
+            "description": "排序字段：stars / forks / updated"
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "example": "desc" },
+            "description": "排序方向：asc / desc"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "int", "example": 5 },
+            "description": "每页返回条数，上限 100"
+          }
+        ],
+        "responses": {
+          "200": { "description": "ok" },
+          "422": { "description": "查询参数不合法" }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}": {
+      "get": {
+        "operationId": "getRepository",
+        "summary": "获取仓库实时指标",
+        "description": "返回单个仓库的实时指标：star、fork、open issues、主语言、最近更新时间。agent 用它核实候选项目，避免被搜索摘要里的过期数据误导。",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "example": "modelcontextprotocol" },
+            "description": "仓库所有者（用户或组织）"
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "example": "servers" },
+            "description": "仓库名"
+          }
+        ],
+        "responses": {
+          "200": { "description": "ok" },
+          "404": { "description": "仓库不存在或无权访问" }
+        }
       }
     }
   }

@@ -46,6 +46,38 @@
 - **Capability call**：通过 MCP 端点调用 `call_rest_api`（GitHub `/zen`）或 `register(github_live)+call_registered_api(getZen)`，均返回 HTTP 200。
 - **预期错误行为**：传入未注册 API 名 → 明确错误；传入内网 URL → 被 `assert_public_url` 拒绝（SSRF 防护）。
 
+## 真实任务（Real task）
+
+评分最高的一项是「能否完成有意义的真实任务，胜过纯 prompt demo」。本作品用一个
+**必须依赖实时数据**的任务来回答，而不是靠单步探测充数。
+
+**任务**：为某个技术主题生成选型简报（默认主题 `model-context-protocol`）。
+
+**为什么纯 prompt 做不到**：结论依赖实时的 star / fork / open issues / 最近更新时间，
+这些数值每天都在变，模型凭训练记忆给不出真实数字，必须调用工具回源。
+
+**三步编排**（每步都是真实 HTTP，可在部署页面现场重跑）：
+
+1. `searchRepositories` —— 检索候选仓库
+2. `getRepository` —— 逐个回源核实（搜索摘要可能过期，必须核实）
+3. 本地聚合 —— 排序并生成简报
+
+**最近一次真实结果**（完整证据：`source/examples/real_agent_task_result.json`）：
+
+| # | 仓库 | Star | Fork | Open issues | 语言 |
+|---|---|---:|---:|---:|---|
+| 1 | modelcontextprotocol/servers | 90384 | 11640 | 536 | TypeScript |
+| 2 | HKUDS/nanobot | 48216 | 8523 | 784 | Python |
+| 3 | DeusData/codebase-memory-mcp | 43513 | 3541 | 591 | C |
+
+**变现口径**：该任务实际产生 4 次真实调用。按 pro 档（$8 / 1k 次，含 5 万次免费额度）
+测算，规模化到 100 万次/月为 **7,600 USD/月**（字段 `invoice_scaled_1m`）。
+实际账单为 0 是因用量未超出免费额度，属预期行为，并非计费未生效——
+因此证据里同时给出「实际口径」与「规模化口径」两张账单。
+
+**现场复现**：打开部署页 → 「真实任务演示」区块 → 点「运行真实任务」；
+或直接 `POST /api/real-task {"topic":"..."}` 查看逐步真实调用与状态码。
+
 ## Security and data handling
 
 - **采集数据**：无用户数据持久化；仅运行时内存计量计数（进程退出即失）。

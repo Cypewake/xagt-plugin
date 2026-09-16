@@ -392,12 +392,19 @@ def _collect_params(raw_params: list, path_level: list) -> tuple[list, list, lis
     path_params, query_params, header_params = [], [], []
     for p in merged.values():
         where = p.get("in")
+        sch = p.get("schema") if isinstance(p.get("schema"), dict) else {}
         entry = {
             "name": p.get("name"),
             "type": _param_type(p.get("schema") or p),
             "required": bool(p.get("required", where == "path")),
             "description": p.get("description", ""),
             "pagination_hint": where == "query" and (p.get("name") or "").lower() in _PAGINATION_HINTS,
+            # 透传 spec 声明的样例值：VERIFY 必须用「真实可调用」的值，
+            # 否则 /repos/{owner}/{repo} 会退化成 /repos/sample/sample → 404，
+            # 把可用接口误判成不可用。缺失时保持为 None，交由 _sample_value 回退。
+            "example": sch.get("example", p.get("example")),
+            "default": sch.get("default", p.get("default")),
+            "enum": sch.get("enum", p.get("enum")),
         }
         if where == "path":
             path_params.append(entry)
@@ -671,6 +678,23 @@ def ingest_spec(source: str) -> dict:
 # VERIFY：真实调用 + 真断言
 # --------------------------------------------------------------------------- #
 def _sample_value(param: dict) -> Any:
+    """生成参数样例值，供 VERIFY 做真实调用。
+
+    优先采用 spec 显式声明的 ``example`` / ``default`` / ``enum[0]``。
+
+    原因：可验证性依赖「样例值真实可调用」。例如 ``/repos/{owner}/{repo}``
+    若按旧逻辑一律填 "sample"，会去请求 ``/repos/sample/sample`` 得到 404，
+    被误判为接口不可用；spec 里写明 example 就能验证到真实 2xx。
+
+    未声明时回退到按类型/名称推断，保持向后兼容（不影响既有 spec）。
+    """
+    for key in ("example", "default"):
+        val = param.get(key)
+        if val is not None and val != "":
+            return val
+    enum = param.get("enum")
+    if enum:
+        return enum[0]
     name = (param.get("name") or "").lower()
     t = param.get("type")
     if t == "int":
@@ -686,6 +710,27 @@ def _sample_value(param: dict) -> Any:
     if "id" in name or "code" in name:
         return "1"
     return "sample"
+
+
+def _structure_body(r: Any, max_items: int = 10) -> tuple[Any, bool]:
+    """把 HTTP 响应解析成 agent 可消费的结构化数据。
+
+    返回 ``(data, truncated)``；解析失败时 data 为 None，调用方回退到 body_preview。
+
+    为什么需要：``body_preview`` 是截断文本，agent 无法从中稳定提取字段，
+    多步任务（检索 → 核实 → 聚合）会在第一步就断掉，工具退化成一次性探针。
+
+    为什么限长：搜索类接口可能一次返回上百条完整记录，直接透传会撑爆
+    模型上下文。列表默认只取前 ``max_items`` 条并标记 truncated，
+    让调用方知道「还有更多」，再自行缩小查询范围。
+    """
+    try:
+        data = r.json()
+    except Exception:  # noqa: BLE001
+        return None, False
+    if isinstance(data, list) and len(data) > max_items:
+        return data[:max_items], True
+    return data, False
 
 
 def classify_response(status_code: int) -> tuple[str, bool]:
@@ -1336,12 +1381,18 @@ async def _call_op_async(
             headers=headers,
             timeout=timeout,
         )
+        data, truncated = _structure_body(r)
         return {
             "status_code": r.status_code,
             "url": str(r.url),
             "latency_ms": round((time.perf_counter() - start) * 1000, 1),
             "ok": 200 <= r.status_code < 300,
             "body_preview": r.text[:2000],
+            # 结构化输出：agent 需要可消化的 JSON 才能做下一步决策。
+            # 只回传截断文本时，「检索候选 → 逐个核实」这类多步任务无法完成，
+            # 工具也就退化成一次性探针而非可用能力。
+            "data": data,
+            "data_truncated": truncated,
         }
     except Exception as e:  # noqa: BLE001
         return {

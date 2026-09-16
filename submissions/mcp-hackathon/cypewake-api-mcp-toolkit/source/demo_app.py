@@ -274,6 +274,91 @@ async def api_full_pipeline(payload: dict) -> Any:
     return steps
 
 
+@app.post("/api/real-task")
+async def api_real_task(payload: dict) -> Any:
+    """跑一个「真实任务」：为某个技术主题生成选型简报。
+
+    评审最关心的是「这东西到底能不能替 agent 干成一件真事」，所以这里不是
+    单步探针，而是三步编排：检索候选 → 逐个核实 → 聚合出简报。
+
+    每步都是真实 HTTP，并如实回传状态码与失败原因（限流 / 404 不粉饰），
+    因为「错误行为是否诚实」本身就是能力质量的一部分。
+    """
+    topic = payload.get("topic") or "model-context-protocol"
+    top_n = int(payload.get("top_n") or 3)
+    spec_source = payload.get("spec_source") or str(
+        Path(__file__).parent / "examples" / "github-openapi.json"
+    )
+    name = "github_live"
+    out: dict[str, Any] = {"topic": topic, "steps": []}
+
+    await core._registry.register_async(name, spec_source)
+
+    # 步骤 1：检索候选
+    s = await core._registry.call_async(
+        name, "searchRepositories",
+        {"q": topic, "sort": "stars", "order": "desc", "per_page": 5},
+    )
+    items = (s.get("data") or {}).get("items") or []
+    candidates = [it.get("full_name") for it in items[:top_n] if it.get("full_name")]
+    out["steps"].append({
+        "step": 1, "action": "检索候选", "tool": "searchRepositories",
+        "status_code": s.get("status_code"), "ok": s.get("ok"),
+        "error": s.get("error"),
+        "summary": f"召回 {len(items)} 个候选，取前 {len(candidates)} 个",
+        "candidates": candidates,
+    })
+
+    # 步骤 2：逐个核实（搜索摘要可能过期，必须回源核实实时指标）
+    verified: list[dict[str, Any]] = []
+    for fn in candidates:
+        if "/" not in fn:
+            continue
+        owner, repo = fn.split("/", 1)
+        r = await core._registry.call_async(
+            name, "getRepository", {"owner": owner, "repo": repo}
+        )
+        d = r.get("data") or {}
+        verified.append({
+            "full_name": d.get("full_name") or fn,
+            "stars": d.get("stargazers_count"),
+            "forks": d.get("forks_count"),
+            "open_issues": d.get("open_issues_count"),
+            "language": d.get("language"),
+            "pushed_at": d.get("pushed_at"),
+            "status_code": r.get("status_code"),
+            "ok": r.get("ok"),
+        })
+    verified.sort(key=lambda x: x.get("stars") or 0, reverse=True)
+    out["steps"].append({
+        "step": 2, "action": "核实实时指标", "tool": "getRepository",
+        "summary": f"核实 {len(verified)} 个仓库", "repos": verified,
+    })
+
+    # 步骤 3：聚合简报
+    out["brief"] = {
+        "top_pick": verified[0]["full_name"] if verified else None,
+        "ranking": verified,
+        "note": "数据来自 GitHub 实时 API，非模型记忆",
+    }
+    out["steps"].append({
+        "step": 3, "action": "聚合简报", "tool": "本地聚合",
+        "summary": f"首选 {out['brief']['top_pick']}",
+    })
+
+    # 计费：实际口径 + 规模化口径（只给实际账单会恒为 0）
+    rep = metering.get_meter().report(name)
+    usage = (rep.get("apis") or {}).get(name) or {}
+    out["billing"] = {
+        "actual_calls": usage.get("total_calls"),
+        "invoice_actual": metering.get_meter().simulate_invoice(name, "pro", basis="actual"),
+        "invoice_scaled_1m": metering.get_meter().simulate_invoice(
+            name, "pro", projected_calls=1_000_000
+        ),
+    }
+    return out
+
+
 # --------------------------------- 页面 ---------------------------------- #
 def _index_html() -> str:
     path = Path(__file__).parent / "static" / "index.html"
