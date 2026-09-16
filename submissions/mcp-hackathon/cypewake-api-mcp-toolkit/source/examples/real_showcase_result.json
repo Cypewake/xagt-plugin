@@ -1,0 +1,185 @@
+{
+  "verify": {
+    "base_url": "https://api.github.com",
+    "total_operations": 3,
+    "filtered_operations": 3,
+    "passed": 3,
+    "verified": 3,
+    "verdict": "全部通过",
+    "detail": [
+      {
+        "operation_id": "getZen",
+        "http_status": 200,
+        "passed": true,
+        "status": "passed",
+        "latency_ms": 1081.9
+      },
+      {
+        "operation_id": "getRateLimit",
+        "http_status": 200,
+        "passed": true,
+        "status": "passed",
+        "latency_ms": 844.6
+      },
+      {
+        "operation_id": "listPublicEvents",
+        "http_status": 200,
+        "passed": true,
+        "status": "passed",
+        "latency_ms": 1254.3
+      }
+    ]
+  },
+  "register": {
+    "name": "github_live",
+    "ops": 3
+  },
+  "calls": [
+    {
+      "operation_id": "getZen",
+      "ok": true,
+      "status_code": 200,
+      "metered": true
+    },
+    {
+      "operation_id": "getZen",
+      "ok": true,
+      "status_code": 200,
+      "metered": true
+    },
+    {
+      "operation_id": "getRateLimit",
+      "ok": true,
+      "status_code": 200,
+      "metered": true
+    },
+    {
+      "operation_id": "getRateLimit",
+      "ok": true,
+      "status_code": 200,
+      "metered": true
+    },
+    {
+      "operation_id": "listPublicEvents",
+      "ok": true,
+      "status_code": 200,
+      "metered": true
+    },
+    {
+      "operation_id": "listPublicEvents",
+      "ok": true,
+      "status_code": 200,
+      "metered": true
+    }
+  ],
+  "usage_report": {
+    "found": true,
+    "currency_note": "计费币种：USD（可用 MCPFORGE_CURRENCY 覆盖）",
+    "total_calls_all_apis": 12,
+    "apis": {
+      "github_live": {
+        "total_calls": 12,
+        "ok_calls": 12,
+        "failed_calls": 0,
+        "success_rate": 1.0,
+        "first_seen": "2026-09-14T10:34:30.898747+00:00",
+        "last_seen": "2026-09-14T10:35:37.114567+00:00",
+        "active_days": 1,
+        "calls_per_day": 12.0,
+        "projected_monthly_calls": 360,
+        "daily": {
+          "2026-09-14": 12
+        },
+        "operations": [
+          {
+            "operation_id": "getRateLimit",
+            "calls": 4,
+            "ok": 4,
+            "failed": 0,
+            "avg_latency_ms": 499.1,
+            "success_rate": 1.0
+          },
+          {
+            "operation_id": "getZen",
+            "calls": 4,
+            "ok": 4,
+            "failed": 0,
+            "avg_latency_ms": 1933.1,
+            "success_rate": 1.0
+          },
+          {
+            "operation_id": "listPublicEvents",
+            "calls": 4,
+            "ok": 4,
+            "failed": 0,
+            "avg_latency_ms": 507.9,
+            "success_rate": 1.0
+          }
+        ]
+      }
+    }
+  },
+  "invoice": {
+    "schema_version": "2.0",
+    "api": "github_live",
+    "pricing_tier": "pro",
+    "billing_model": "pay-per-call",
+    "currency": "USD",
+    "billing_basis": "实际已记录用量",
+    "metered_actual": {
+      "total_calls": 12,
+      "ok_calls": 12,
+      "failed_calls": 0,
+      "success_rate": 1.0,
+      "active_days": 1,
+      "calls_per_day": 12.0
+    },
+    "billable_calls": 12,
+    "included_calls": 50000,
+    "billable_overage_calls": 0,
+    "price_per_1k_calls": 8.0,
+    "amount_due": 0.0,
+    "line_items": [
+      {
+        "operation_id": "getRateLimit",
+        "actual_calls": 4,
+        "share_of_actual_calls": 0.333,
+        "projected_calls": 4
+      },
+      {
+        "operation_id": "getZen",
+        "actual_calls": 4,
+        "share_of_actual_calls": 0.333,
+        "projected_calls": 4
+      },
+      {
+        "operation_id": "listPublicEvents",
+        "actual_calls": 4,
+        "share_of_actual_calls": 0.333,
+        "projected_calls": 4
+      }
+    ],
+    "generated_at": "2026-09-14T10:35:37.172964+00:00",
+    "note": "用量来自本服务真实计量（usage.json），非凭空估值；外推口径已在 billing_basis 标明。"
+  },
+  "manifest": {
+    "name": "github_live",
+    "pricing_tier": "pro",
+    "currency": "USD",
+    "tool_count": 3,
+    "billing_model": "pay-per-call"
+  },
+  "health": {
+    "status": "ok",
+    "service": "MCPForge",
+    "version": "2.1.0",
+    "registered_apis": [
+      "github_live"
+    ],
+    "counters": {
+      "registered_apis": 1,
+      "metered_calls": 12
+    },
+    "time": "2026-09-14T10:35:37.174497+00:00"
+  }
+}

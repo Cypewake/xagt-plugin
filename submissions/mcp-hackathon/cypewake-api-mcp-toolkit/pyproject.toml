@@ -1,0 +1,41 @@
+[project]
+name = "mcpsforge-api-mcp-toolkit"
+version = "2.1.0"
+description = "MCPForge · API→MCP 全链路工厂：把任意 OpenAPI 描述转换成 Agent 可直接调用的 MCP 能力，覆盖 Build → Verify → MCPize → Monetize"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["mcp", "openapi", "fastmcp", "llm", "agent", "hackathon"]
+
+dependencies = [
+    "fastmcp>=4.0,<5.0",
+    "httpx>=0.27,<1.0",
+    "pyyaml>=6.0,<7.0",
+]
+
+[project.optional-dependencies]
+# 可视化 demo 与 /mcp 端点
+demo = [
+    "fastapi>=0.110,<1.0",
+    "uvicorn>=0.27,<1.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+mcpsforge-verify = "verify:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# 默认只跑离线用例（确定性、不联网）。
+# 需要真实出网的用例请显式指定：pytest -m live -v
+addopts = '-q -m "not live"'
+markers = [
+    "live: 需要真实公网访问的测试（默认不选）",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

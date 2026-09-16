@@ -1,0 +1,22 @@
+目标实例：http://127.0.0.1:8000（本地单进程：uvicorn demo_app:app，零部署即可复核）
+------------------------------------------------------------------------
+[PASS] 健康检查 GET /api/health — HTTP 200 status=ok version=2.1.0
+[PASS] 可视化四阶段走查页 GET / — HTTP 200 15770 字节
+[PASS] 计价档位可读（MONETIZE 有真实定价口径）GET /api/config — 档位=['free', 'basic', 'pro', 'enterprise'] 币种=USD
+[PASS] MCP 端点可列出工具 — 14 个
+[PASS] 规格点名的 7 个工具全部存在 — 齐全
+[PASS] 工具调用：health_check — status=ok
+[PASS] 工具调用：parse_openapi_spec 解析本地 Petstore 风格规格 — 5 个操作，鉴权方案=['fixture_key', 'fixture_oauth']
+[PASS] 工具调用：list_operations 输出可读操作清单 — 276 字符，含 getPetById=True
+[PASS] 工具调用：call_rest_api 真实出网（GitHub 公共 REST API） — HTTP 200，耗时 622.2 ms
+[PASS] 工具调用：generate_mcp_tool_code 产出可部署 FastMCP 源码（§6 #2） — 59 行，含 FastMCP 与 get_pet_by_id
+[PASS] 工具调用：register + call_registered_api(getZen) 真实出网（§6 #3） — register ops=3 | call HTTP 200
+------------------------------------------------------------------------
+结果：11 通过 / 0 未通过
+
+说明（2026-09-14 实测）：
+- 本结果由 docs/judge_check.py 在本地（http://127.0.0.1:8000）真实跑通，非公网实例。
+- 硬门槛「API 必须真实可调用」由两项真实出网验证：call_rest_api 直连 api.github.com/zen 返回 200；
+  register + call_registered_api(getZen) 对真实 GitHub 公共 REST API 实调返回 200。
+- MCP 端点同时兼容 fastmcp.Client 默认（mode=auto）与 mode=legacy，标准 MCP 客户端均可直连 /mcp。
+- 解析/生成/列出类检查走本地 fixtures/tests/fixtures/offline-api.json，不依赖出网，任意离线环境可复核。

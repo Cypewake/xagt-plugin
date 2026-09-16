@@ -1,0 +1,86 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Offline Fixture API",
+    "version": "1.0.0",
+    "description": "MCPForge 离线测试用夹具：形状对齐 Swagger Petstore，但不依赖任何网络。"
+  },
+  "servers": [{ "url": "/api/v3" }],
+  "components": {
+    "parameters": {
+      "PageParam": {
+        "name": "page",
+        "in": "query",
+        "required": false,
+        "description": "页码（用于验证 path 级 parameters 的 $ref 合并）",
+        "schema": { "type": "integer" }
+      }
+    },
+    "securitySchemes": {
+      "fixture_key": { "type": "apiKey", "in": "header", "name": "X-Fixture-Key" },
+      "fixture_oauth": {
+        "type": "oauth2",
+        "flows": { "implicit": { "authorizationUrl": "https://example.com/auth", "scopes": {} } }
+      }
+    }
+  },
+  "paths": {
+    "/pet/{petId}": {
+      "parameters": [{ "$ref": "#/components/parameters/PageParam" }],
+      "get": {
+        "operationId": "getPetById",
+        "summary": "按 ID 取宠物",
+        "tags": ["pet"],
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "description": "宠物 ID",
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": { "200": { "description": "ok" } }
+      },
+      "delete": {
+        "operationId": "deletePet",
+        "summary": "删除宠物",
+        "security": [{ "fixture_key": [] }],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/pet": {
+      "post": {
+        "operationId": "addPet",
+        "summary": "新增宠物",
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object" } }
+          }
+        },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/store/inventory": {
+      "get": {
+        "operationId": "getInventory",
+        "summary": "库存统计",
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/weird/{account-id}/balance": {
+      "get": {
+        "operationId": "getWeirdBalance",
+        "summary": "含非标识符占位符的路径",
+        "parameters": [
+          {
+            "name": "account-id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "ok" } }
+      }
+    }
+  }
+}

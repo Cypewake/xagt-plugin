@@ -1,0 +1,64 @@
+{
+  "build": {
+    "title": "Swagger Petstore - OpenAPI 3.0",
+    "base_url": "https://petstore3.swagger.io/api/v3",
+    "operation_count": 19,
+    "auth_schemes": [
+      "petstore_auth",
+      "api_key"
+    ]
+  },
+  "verify": {
+    "verified": 3,
+    "passed": 0,
+    "reached_but_failed": 3,
+    "unreachable": 0,
+    "verdict": "无通过项（端点可能需要鉴权或真实参数）",
+    "filtered_operations": 3
+  },
+  "mcpize": {
+    "tools": 3,
+    "original_operations": 19,
+    "scope": {
+      "include_tags": [
+        "pet"
+      ],
+      "include_methods": [
+        "GET"
+      ]
+    },
+    "output_dir": "generated/petstore-mcp"
+  },
+  "register": {
+    "name": "petstore",
+    "operations": 19,
+    "overwrote_existing": true
+  },
+  "call": {
+    "attempted": true,
+    "operation_id": "loginUser",
+    "params": {
+      "username": "sample",
+      "password": "sample"
+    },
+    "status_code": 200,
+    "ok": true
+  },
+  "monetize": {
+    "tool_count": 3,
+    "pricing_tier": "basic",
+    "price_per_1k_calls": 2.0,
+    "currency": "USD"
+  },
+  "invoice_preview": {
+    "schema_version": "2.0",
+    "api": "petstore",
+    "pricing_tier": "basic",
+    "billing_model": "pay-per-call",
+    "currency": "USD",
+    "billing_basis": "指定调用量测算",
+    "amount_due": 180.0,
+    "note": "用量来自本服务真实计量（usage.json），非凭空估值；外推口径已在 billing_basis 标明。"
+  },
+  "note": "v2.1 示例：使用 scope 把 Petstore 从 19 个端点策展到 3 个 pet GET 工具，压缩率 84%。"
+}

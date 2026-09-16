@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "name": "MCPForge",
+  "slug": "cypewake-api-mcp-toolkit",
+  "sourceRepository": "https://github.com/cypewake/xagt-plugin",
+  "reviewCommit": "<REVIEW_COMMIT>",
+  "apiBaseUrl": "<DEPLOY_URL>",
+  "healthCheckUrl": "<DEPLOY_URL>/api/health",
+  "deploymentProofUrl": "<DEPLOY_URL>/.well-known/xagent-verification.json"
+}

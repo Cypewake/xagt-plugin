@@ -1,0 +1,62 @@
+name: CI
+
+# 说明（如实声明）：
+# 本文件位于作品子目录内。在**本项目的独立仓库**中，把它放到仓库根的
+# .github/workflows/ 下即会自动运行；直接嵌套在官方提交仓库的 submissions/ 目录里
+# 时 GitHub 不会读取它（Actions 只扫描仓库根的 .github/workflows/）。
+# 无论是否启用 Actions，本地等价命令都是：
+#     pip install -r requirements-dev.txt && pytest -q
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: 离线测试与验收（Python ${{ matrix.python-version }}）
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: 代码可编译（语法门）
+        run: python -m compileall -q core.py server.py demo_app.py metering.py fastmcp_kwargs.py verify.py
+
+      - name: 离线单元测试（不依赖公网）
+        run: pytest -q
+
+      - name: 离线验收层（确定性检查）
+        run: |
+          python - <<'PY'
+          import verify
+          ok = verify.verify_offline()
+          raise SystemExit(0 if ok else 1)
+          PY
+
+      - name: 演示服务可启动并返回健康检查
+        run: |
+          pip install fastapi uvicorn
+          python -m uvicorn demo_app:app --port 8765 &
+          for i in $(seq 1 20); do
+            sleep 1
+            if curl -sf http://127.0.0.1:8765/api/health > /dev/null; then
+              echo "健康检查通过"; curl -s http://127.0.0.1:8765/api/health; exit 0
+            fi
+          done
+          echo "健康检查未通过"; exit 1

@@ -1,0 +1,37 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "GitHub 公共 REST API（MCPForge 样板）",
+    "version": "1.0.0",
+    "description": "真实、免密钥（未认证限流内可用）的高频开发者接口。agent 用来查仓库、查用户、查限流，是「agent 真正会调用」的典型 API。用于演示 MCPForge 的 Build → Verify → MCPize → Monetize 全链路。"
+  },
+  "servers": [
+    { "url": "https://api.github.com" }
+  ],
+  "paths": {
+    "/zen": {
+      "get": {
+        "operationId": "getZen",
+        "summary": "格言",
+        "description": "返回一句设计格言，证明 API 可达。",
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/rate_limit": {
+      "get": {
+        "operationId": "getRateLimit",
+        "summary": "查询限流额度",
+        "description": "返回当前 IP 的 API 限流情况，agent 用它判断是否需要退避。",
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/events": {
+      "get": {
+        "operationId": "listPublicEvents",
+        "summary": "公开事件流",
+        "description": "返回全网公开事件，agent 用它做活动监听/趋势感知。",
+        "responses": { "200": { "description": "ok" } }
+      }
+    }
+  }
+}
