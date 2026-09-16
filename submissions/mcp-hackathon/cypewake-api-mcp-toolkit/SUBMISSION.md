@@ -59,3 +59,16 @@
 - **团队 / 作者**：cypewake
 - **联系**：GitHub @cypewake
 - **许可 / 权利**：提交者拥有源码权利，并授权 X-Agent 评审与归档。
+
+## 身份映射（Identity mapping）
+
+> 用于评审对账：以下两个标识为**同一参与者**。
+
+| 渠道 | 标识 |
+| --- | --- |
+| Luma 报名（选 Open Innovation 赛道） | **wake** |
+| GitHub 账号 / 本 PR 提交账号 | **cypewake** |
+| 公开部署域名 | mcpforge-cypewake.app.workbuddy.host |
+| 本 PR | xagentAI/xagt-plugin#61 |
+
+若评审需要把报名记录与本 PR 关联，请以上表为准：`wake`（Luma）= `cypewake`（GitHub），同一人。
