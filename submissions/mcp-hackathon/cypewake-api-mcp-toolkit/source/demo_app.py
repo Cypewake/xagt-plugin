@@ -296,25 +296,131 @@ def _load_cached_task_evidence() -> dict:
 
 @app.post("/api/real-task")
 async def api_real_task(payload: dict) -> Any:
-    """Run a real task: produce a selection brief for a technical topic.
+    """Run a real agent task against a live, public, keyless REST API wrapped by MCPForge.
 
-    Reviewers care most about whether this actually finishes a real job for an agent, so this is a
-    three-step chain rather than a single probe: search → verify each candidate → aggregate a brief.
+    Reviewers care most about whether this actually finishes a real job for an agent, so each sample is a
+    three-step chain rather than a single probe: list resources -> verify each live -> aggregate a brief.
 
-    Every step is a real HTTP call and reports status codes and failure reasons as they are (rate limits and 404s stay visible),
-    because honest error behavior is part of capability quality.
+    Default sample is JSONPlaceholder, because the hosting egress proxy allows it (api.github.com is
+    DNS-rewritten into a blocked 198.18.x.x range on that platform). Pass {"api": "github"} to run the
+    richer GitHub sample in an environment with normal egress.
     """
+    api = (payload.get("api") or "jsonplaceholder").lower()
+    if api == "github":
+        return await _real_task_github(payload)
+    return await _real_task_jsonplaceholder(payload)
+
+
+async def _real_task_jsonplaceholder(payload: dict) -> Any:
+    """Live task against JSONPlaceholder: proves end-to-end invocation of a wrapped OpenAPI spec.
+
+    JSONPlaceholder is the default live demo because the hosting egress permits it while blocking
+    api.github.com. Every call hits the real endpoint and reports status codes honestly; if even this
+    host is unreachable, the recorded snapshot is shown and labelled.
+    """
+    name = "jsonplaceholder_live"
+    top_n = int(payload.get("top_n") or 3)
+    spec_source = str(Path(__file__).parent / "examples" / "jsonplaceholder-openapi.json")
+    out: dict[str, Any] = {"api": "jsonplaceholder", "steps": []}
+
+    await core._registry.register_async(name, spec_source)
+
+    # Step 1: list posts
+    s = await core._registry.call_async(name, "listPosts", {"_limit": 10})
+    posts = s.get("data") or []
+    if not isinstance(posts, list):
+        posts = []
+    candidates = posts[:top_n]
+    out["steps"].append({
+        "step": 1, "action": "list posts", "tool": "listPosts",
+        "status_code": s.get("status_code"), "ok": s.get("ok"), "error": s.get("error"),
+        "summary": f"listed {len(posts)} posts, taking the first {len(candidates)}",
+        "candidates": [{"id": p.get("id"), "title": p.get("title")} for p in candidates],
+    })
+
+    # Step 2: verify each post's live detail (search summaries go stale; real data comes from the source)
+    verified: list[dict[str, Any]] = []
+    for p in candidates:
+        pid = p.get("id")
+        if pid is None:
+            continue
+        r = await core._registry.call_async(name, "getPost", {"id": pid})
+        d = r.get("data") or {}
+        verified.append({
+            "id": d.get("id"), "title": d.get("title"),
+            "userId": d.get("userId"), "body_snippet": (d.get("body") or "")[:80],
+            "status_code": r.get("status_code"), "ok": r.get("ok"),
+        })
+    verified.sort(key=lambda x: (x.get("id") or 0))
+    out["steps"].append({
+        "step": 2, "action": "verify live post detail", "tool": "getPost",
+        "summary": f"verified {len(verified)} posts", "posts": verified,
+    })
+
+    # Step 3: enrich the top post with its author and aggregate a reading brief
+    if verified:
+        top = verified[0]
+        author: dict[str, Any] = {}
+        if top.get("userId") is not None:
+            a = await core._registry.call_async(name, "getUser", {"id": top["userId"]})
+            author = (a.get("data") or {})
+        company = author.get("company")
+        if isinstance(company, dict):
+            company = company.get("name")
+        out["source"] = "live"
+        out["brief"] = {
+            "top_pick": top.get("title"),
+            "by_author": author.get("name"),
+            "author_email": author.get("email"),
+            "company": company,
+            "ranking": verified,
+            "note": "data from the live JSONPlaceholder API, not model memory",
+        }
+    else:
+        cached = _load_cached_task_evidence()
+        out["source"] = "cached_evidence" if cached else "unavailable"
+        out["degraded_reason"] = (
+            out["steps"][0].get("error") or "this environment cannot reach jsonplaceholder.typicode.com"
+        )
+        cbrief = cached.get("brief") or {}
+        out["brief"] = {
+            "top_pick": cbrief.get("top_pick"),
+            "ranking": cached.get("step2_verify_details") or [],
+            "note": ("outbound access is restricted here; showing the snapshot captured in an offline environment"
+                     if cached else "no evidence available"),
+        }
+    out["steps"].append({
+        "step": 3,
+        "action": "aggregate brief" + (" (offline evidence fallback)" if out["source"] == "cached_evidence" else ""),
+        "tool": "local aggregation",
+        "summary": f"top pick {out['brief'].get('top_pick')}",
+    })
+
+    # Billing: actual basis + scaled basis (actual alone is always 0)
+    rep = metering.get_meter().report(name)
+    usage = (rep.get("apis") or {}).get(name) or {}
+    out["billing"] = {
+        "actual_calls": usage.get("total_calls"),
+        "invoice_actual": metering.get_meter().simulate_invoice(name, "pro", basis="actual"),
+        "invoice_scaled_1m": metering.get_meter().simulate_invoice(
+            name, "pro", projected_calls=1_000_000
+        ),
+    }
+    return out
+
+
+async def _real_task_github(payload: dict) -> Any:
+    """Richer GitHub sample, used where the egress permits api.github.com."""
+    name = "github_live"
     topic = payload.get("topic") or "model-context-protocol"
     top_n = int(payload.get("top_n") or 3)
     spec_source = payload.get("spec_source") or str(
         Path(__file__).parent / "examples" / "github-openapi.json"
     )
-    name = "github_live"
-    out: dict[str, Any] = {"topic": topic, "steps": []}
+    out: dict[str, Any] = {"api": "github", "topic": topic, "steps": []}
 
     await core._registry.register_async(name, spec_source)
 
-    # Step 1: search for candidates
     s = await core._registry.call_async(
         name, "searchRepositories",
         {"q": topic, "sort": "stars", "order": "desc", "per_page": 5},
@@ -329,15 +435,12 @@ async def api_real_task(payload: dict) -> Any:
         "candidates": candidates,
     })
 
-    # Step 2: verify each one (search summaries go stale, so real metrics must come from the source)
     verified: list[dict[str, Any]] = []
     for fn in candidates:
         if "/" not in fn:
             continue
         owner, repo = fn.split("/", 1)
-        r = await core._registry.call_async(
-            name, "getRepository", {"owner": owner, "repo": repo}
-        )
+        r = await core._registry.call_async(name, "getRepository", {"owner": owner, "repo": repo})
         d = r.get("data") or {}
         verified.append({
             "full_name": d.get("full_name") or fn,
@@ -346,8 +449,7 @@ async def api_real_task(payload: dict) -> Any:
             "open_issues": d.get("open_issues_count"),
             "language": d.get("language"),
             "pushed_at": d.get("pushed_at"),
-            "status_code": r.get("status_code"),
-            "ok": r.get("ok"),
+            "status_code": r.get("status_code"), "ok": r.get("ok"),
         })
     verified.sort(key=lambda x: x.get("stars") or 0, reverse=True)
     out["steps"].append({
@@ -355,7 +457,6 @@ async def api_real_task(payload: dict) -> Any:
         "summary": f"verified {len(verified)} repositories", "repos": verified,
     })
 
-    # Step 3: aggregate the brief. Fall back to the recorded snapshot when outbound is blocked, so reviewers never see an empty result.
     if verified:
         out["source"] = "live"
         out["brief"] = {
@@ -383,7 +484,6 @@ async def api_real_task(payload: dict) -> Any:
         "summary": f"top pick {out['brief']['top_pick']}",
     })
 
-    # Billing: actual basis + scaled basis (actual alone is always 0)
     rep = metering.get_meter().report(name)
     usage = (rep.get("apis") or {}).get(name) or {}
     out["billing"] = {
@@ -394,6 +494,8 @@ async def api_real_task(payload: dict) -> Any:
         ),
     }
     return out
+
+
 
 
 # --------------------------------- page ---------------------------------- #

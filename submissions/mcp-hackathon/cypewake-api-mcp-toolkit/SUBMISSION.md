@@ -70,7 +70,7 @@ The heaviest scoring dimension asks whether the entry completes a meaningful rea
 
 **Monetization figures:** metering recorded 24 calls for this API. At the pro tier ($8.00 per 1k calls, 50,000 included), scaling to 1,000,000 calls per month gives **7,600 USD/month** (field `invoice_scaled`). The actual invoice reads 0 USD because usage stays inside the free quota — expected behavior, not a broken meter — so the evidence ships both an actual-basis and a scaled-basis invoice.
 
-**Reproduce live:** open the deployment → "Real task" section → run it; or `POST /api/real-task {"topic":"..."}` to see each real call with its status code.
+**Reproduce live:** open the deployment → "Real task" section → run it; or `POST /api/real-task` (defaults to the live JSONPlaceholder sample) / `POST /api/real-task {"api":"github"}` to see each real call with its status code.
 
 ## Security and data handling
 
