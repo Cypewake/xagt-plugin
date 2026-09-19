@@ -24,6 +24,11 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+# Pin the operator-trusted public showcase host BEFORE core is imported, so the deployed
+# demo can call the live GitHub API even where the platform egress resolves it into a
+# reserved range. Only this host is exempt; every other URL stays fully blocked.
+os.environ.setdefault("MCPFORGE_TRUSTED_HOSTS", "api.github.com")
+
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 

@@ -125,6 +125,7 @@ On Swagger Petstore: 19 endpoints → 3 tools at 84% reduction with tag+method f
 | Local spec reads | Restricted to the working directory | `MCPFORGE_READ_ROOTS`, or `MCPFORGE_ALLOW_ANY_PATH=1` |
 | Generated output | Name allowlist; result must land inside the output root | — |
 | Outbound requests | Blocks loopback, private ranges, link-local, reserved addresses, and cloud metadata endpoints; **re-validated on every redirect hop** | `MCPFORGE_ALLOW_PRIVATE_NET=1` |
+| Outbound trusted hosts | Block all hosts by default; the operator may pin specific public showcase hosts (e.g. `api.github.com`) that a cloud egress proxies into a reserved range (198.18.0.0/15). Only the named host is exempt; every other URL still goes through the full check | `MCPFORGE_TRUSTED_HOSTS=api.github.com` |
 | Metering and registry | Atomic writes; a corrupt file is preserved as `.corrupt.json`, never silently cleared | — |
 
 ### The redirect bypass, and why it gets its own section

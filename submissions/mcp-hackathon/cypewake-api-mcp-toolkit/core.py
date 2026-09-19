@@ -103,11 +103,32 @@ def ensure_writable_dir(root: str, name: str) -> Path:
     return target
 
 
+# Trusted public hosts pinned by the operator (default empty = trust nothing, block all).
+# A host is allowed through only when explicitly listed here; its resolved address is then
+# exempt from the reserved-range refusal. This is what lets the official showcase host
+# api.github.com work on cloud platforms whose egress proxy resolves it into 198.18.0.0/15
+# (RFC 2544 benchmarking range), which the reserved-address check would otherwise reject.
+# All other user-supplied URLs still go through the full public-network validation.
+_TRUSTED_HOSTS = {
+    h.strip().lower()
+    for h in os.getenv("MCPFORGE_TRUSTED_HOSTS", "").split(",")
+    if h.strip()
+}
+
+
+def _is_trusted_host(host: str) -> bool:
+    host = (host or "").lower()
+    if not host:
+        return False
+    return any(host == th or host.endswith("." + th) for th in _TRUSTED_HOSTS)
+
+
 def assert_public_url(url: str) -> None:
     """SSRF guard applied before any outbound request: refuses loopback, private, link-local, and reserved addresses.
 
     This is not complete protection (it does not stop DNS rebinding), but it blocks the two most common abuses:
     cloud metadata endpoints and internal network probing. Set MCPFORGE_ALLOW_PRIVATE_NET=1 for local debugging.
+    A host listed in MCPFORGE_TRUSTED_HOSTS bypasses only the reserved-range refusal.
     """
     if os.getenv("MCPFORGE_ALLOW_PRIVATE_NET", "") == "1":
         return
@@ -119,6 +140,10 @@ def assert_public_url(url: str) -> None:
         raise ValueError(f"URL is missing a host: {url}")
     if host == "localhost" or host.endswith(".localhost"):
         raise ValueError(f"refusing localhost address {host} (set MCPFORGE_ALLOW_PRIVATE_NET=1 to allow it)")
+    if _is_trusted_host(host):
+        # Operator-pinned public showcase host: allow its (possibly egress-proxy) resolved address,
+        # while every other URL still goes through the full check below.
+        return
     port = p.port or (443 if p.scheme == "https" else 80)
     try:
         infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
