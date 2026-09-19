@@ -1,7 +1,7 @@
 [project]
 name = "mcpsforge-api-mcp-toolkit"
 version = "2.1.0"
-description = "MCPForge · API→MCP 全链路工厂：把任意 OpenAPI 描述转换成 Agent 可直接调用的 MCP 能力，覆盖 Build → Verify → MCPize → Monetize"
+description = "MCPForge · API→MCP full-chain factory: turn any OpenAPI description into MCP capabilities agents can call directly, covering Build → Verify → MCPize → Monetize"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# 可视化 demo 与 /mcp 端点
+# visual demo and /mcp endpoint
 demo = [
     "fastapi>=0.110,<1.0",
     "uvicorn>=0.27,<1.0",
@@ -29,11 +29,11 @@ mcpsforge-verify = "verify:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# 默认只跑离线用例（确定性、不联网）。
-# 需要真实出网的用例请显式指定：pytest -m live -v
+# by default only run offline cases (deterministic, no network)
+# for tests needing real network, run explicitly: pytest -m live -v
 addopts = '-q -m "not live"'
 markers = [
-    "live: 需要真实公网访问的测试（默认不选）",
+    "live: tests requiring real public network access (not selected by default)",
 ]
 
 [build-system]

@@ -33,7 +33,7 @@ Every claim below maps to a command or a file in this repository.
 
 | Judge question | Evidence | Reproduce |
 |---|---|---|
-| Is the wrapped API real? | GitHub public REST API returns 2xx on all 5 operations | `python docs/judge_check.py` |
+| Is the wrapped API real? | Live demo calls the JSONPlaceholder (default) and GitHub (opt-in) public REST APIs and returns 2xx on showcase operations | `python docs/judge_check.py` |
 | Is it callable? | 14 MCP tools enumerate over `/mcp` with a stock `fastmcp.Client` | same run, tools section |
 | Is it verifiable? | `verify_api` counts **only HTTP 2xx** as passed; 401/403/404/429/5xx are classified separately | `core.classify_response` + tests |
 | Is it monetizable? | Per-call metering persisted to `usage.json` (atomic write), then billed by tier | `examples/real_showcase_result.json` |
@@ -44,11 +44,13 @@ Every claim below maps to a command or a file in this repository.
 
 Scoring weights "real agent or user value" highest. A converter that generates tools proves plumbing. MCPForge finishes a task that a prompt alone cannot, because the answer depends on live numbers.
 
-`examples/real_agent_task.py` runs a three-step chain against the live GitHub API:
+The live demo (`POST /api/real-task`, default **JSONPlaceholder**) runs a real three-step chain against a public REST API:
 
-1. **Search** — `searchRepositories` for MCP-related projects.
-2. **Verify each candidate** — `getRepository` back at the source, because search summaries go stale.
-3. **Aggregate** — rank by live stars, forks, open issues, language, and last push.
+1. **List** — pull recent posts from JSONPlaceholder.
+2. **Verify each** — fetch each post and its author back at the source, because list summaries go stale.
+3. **Aggregate** — rank by author and surface a reading brief (top author, company, post count).
+
+JSONPlaceholder is the default because the deployment egress allows it; GitHub is blocked there. The same handler accepts `{"api":"github"}` to run the GitHub sample live wherever egress is normal, and a recorded GitHub run is kept at `examples/real_agent_task_result.json`.
 
 Result from the recorded run (`examples/real_agent_task_result.json`):
 
@@ -57,7 +59,7 @@ Result from the recorded run (`examples/real_agent_task_result.json`):
 | 1 | `modelcontextprotocol/servers` | 90,384 | TypeScript |
 | 2 | `HKUDS/nanobot` | 48,216 | Python |
 
-Star counts and push timestamps change daily, so a model answering from memory gives wrong numbers. The chain also records metering and billing for every step: 24 metered calls in the actual run, and the same pricing model projects **$7,600 USD per month at 1,000,000 calls** (pro tier: 50,000 calls included, $8.00 per additional 1,000).
+Star counts and push timestamps change daily, so a model answering from memory gives wrong numbers. The live JSONPlaceholder chain likewise returns numbers only a real call can produce. Every step also records metering and billing: the actual run metered 24 calls, and the same pricing model projects **$7,600 USD per month at 1,000,000 calls** (pro tier: 50,000 calls included, $8.00 per additional 1,000).
 
 Run it yourself:
 
