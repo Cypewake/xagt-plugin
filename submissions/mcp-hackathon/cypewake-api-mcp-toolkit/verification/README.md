@@ -4,7 +4,7 @@ Commands below run against the live deployment and need no credentials.
 
 ## Prerequisites
 
-- Review commit: `a63b283fab9e9021409dba56cc49a917d49f4c34`
+- Review commit: `a5d85ab0468ea93a1426c2327cfeabe4d18db778`
 - API base URL: `https://mcpforge-cypewake.app.workbuddy.host`
 - Authentication: none
 
@@ -17,7 +17,7 @@ curl --fail --silent --show-error https://mcpforge-cypewake.app.workbuddy.host/a
 Expected response:
 
 ```json
-{"status":"ok","commit":"a63b283fab9e9021409dba56cc49a917d49f4c34"}
+{"status":"ok","commit":"a5d85ab0468ea93a1426c2327cfeabe4d18db778"}
 ```
 
 ## 2. Deployment proof
@@ -29,7 +29,7 @@ curl --fail --silent --show-error https://mcpforge-cypewake.app.workbuddy.host/.
 Expected response:
 
 ```json
-{"schemaVersion":1,"slug":"cypewake-api-mcp-toolkit","commit":"a63b283fab9e9021409dba56cc49a917d49f4c34"}
+{"schemaVersion":1,"slug":"cypewake-api-mcp-toolkit","commit":"a5d85ab0468ea93a1426c2327cfeabe4d18db778"}
 ```
 
 ## 3. Capability call
