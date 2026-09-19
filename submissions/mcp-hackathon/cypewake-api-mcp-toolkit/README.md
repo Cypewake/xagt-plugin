@@ -14,7 +14,7 @@ MCPForge reads an OpenAPI description — URL, local file, or pasted text — an
 | Health (hard gate) | https://mcpforge-cypewake.app.workbuddy.host/api/health |
 | Deployment proof | https://mcpforge-cypewake.app.workbuddy.host/.well-known/xagent-verification.json |
 | MCP endpoint | https://mcpforge-cypewake.app.workbuddy.host/mcp/ |
-| Pinned review commit | `92c6032240e7ef105cce50230f49aa353cf8ccda` |
+| Pinned review commit | `a63b283fab9e9021409dba56cc49a917d49f4c34` |
 
 Both proof endpoints return the pinned commit above, and the deployed code is byte-identical to that commit in the public fork.
 
