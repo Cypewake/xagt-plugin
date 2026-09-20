@@ -7,7 +7,7 @@ Turn any OpenAPI-described REST API into MCP tools an agent can call, verify, an
 - API base: https://mcpforge-cypewake.app.workbuddy.host
 - Health: https://mcpforge-cypewake.app.workbuddy.host/api/health
 - Deployment proof: https://mcpforge-cypewake.app.workbuddy.host/.well-known/xagent-verification.json
-- Review commit: `a5d85ab0468ea93a1426c2327cfeabe4d18db778`
+- Review commit: `3db59e3afed8e1de2929197dc107b328701d7a22`
 
 Both proof endpoints return the pinned commit, and the deployed code matches that commit in the public fork.
 

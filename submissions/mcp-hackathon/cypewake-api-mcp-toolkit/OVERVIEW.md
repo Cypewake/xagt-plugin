@@ -46,7 +46,7 @@ v2 came out of two independent passes run with a clean context and a falsificati
 | `/mcp/` over an MCP client | 14 tools, all 7 contract-named tools present, `call_rest_api` reaches `api.github.com/zen` with 200 |
 | `/api/real-task` | Three-step chain finishing a real selection brief |
 
-Deployed at https://mcpforge-cypewake.app.workbuddy.host with the pinned review commit `a5d85ab0468ea93a1426c2327cfeabe4d18db778`.
+Deployed at https://mcpforge-cypewake.app.workbuddy.host with the pinned review commit `3db59e3afed8e1de2929197dc107b328701d7a22`.
 
 ## 6. Known limitations
 

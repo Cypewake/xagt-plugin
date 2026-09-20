@@ -9,7 +9,7 @@ curl --fail --silent --show-error https://mcpforge-cypewake.app.workbuddy.host/a
 curl --fail --silent --show-error https://mcpforge-cypewake.app.workbuddy.host/.well-known/xagent-verification.json
 ```
 
-Both return commit `a5d85ab0468ea93a1426c2327cfeabe4d18db778`, which matches `reviewCommit` in `submission.json`.
+Both return commit `3db59e3afed8e1de2929197dc107b328701d7a22`, which matches `reviewCommit` in `submission.json`.
 
 ## 2. Reproduce locally, no deployment needed
 

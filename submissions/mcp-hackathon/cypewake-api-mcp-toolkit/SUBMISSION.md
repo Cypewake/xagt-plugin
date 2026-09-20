@@ -19,30 +19,30 @@
 ## Source and reproducibility
 
 - **Source repository:** https://github.com/cypewake/xagt-plugin
-- **Review commit:** `a5d85ab0468ea93a1426c2327cfeabe4d18db778`
+- **Review commit:** `3db59e3afed8e1de2929197dc107b328701d7a22`
 - **Source submitted in this PR:** `source/`
 - **Run tests:** `pip install -r source/requirements.txt && pytest source/tests` (53 offline + 6 live-marked, all green)
 - **Run locally:** `pip install "fastmcp>=4.0,<5.0"` then `uvicorn demo_app:app --host 0.0.0.0 --port 8000`
-- **Deploy:** `uvicorn demo_app:app --host 0.0.0.0 --port $PORT` with `REVIEW_COMMIT=a5d85ab0468ea93a1426c2327cfeabe4d18db778`
+- **Deploy:** `uvicorn demo_app:app --host 0.0.0.0 --port $PORT` with `REVIEW_COMMIT=3db59e3afed8e1de2929197dc107b328701d7a22`
 - **Version binding:** the deployment exposes the review commit through `REVIEW_COMMIT`; `/api/health` and `/.well-known/xagent-verification.json` both return it.
 
 The deployment returns exactly:
 
 ```json
 // GET https://mcpforge-cypewake.app.workbuddy.host/api/health
-{"status":"ok","commit":"a5d85ab0468ea93a1426c2327cfeabe4d18db778"}
+{"status":"ok","commit":"3db59e3afed8e1de2929197dc107b328701d7a22"}
 ```
 
 ```json
 // GET https://mcpforge-cypewake.app.workbuddy.host/.well-known/xagent-verification.json
-{"schemaVersion":1,"slug":"cypewake-api-mcp-toolkit","commit":"a5d85ab0468ea93a1426c2327cfeabe4d18db778"}
+{"schemaVersion":1,"slug":"cypewake-api-mcp-toolkit","commit":"3db59e3afed8e1de2929197dc107b328701d7a22"}
 ```
 
 ## Verification
 
 Reproducible call instructions and redacted sample responses live in `verification/README.md`.
 
-- **Health-check result:** `status=ok`, `commit=a5d85ab0468ea93a1426c2327cfeabe4d18db778`.
+- **Health-check result:** `status=ok`, `commit=3db59e3afed8e1de2929197dc107b328701d7a22`.
 - **Capability call:** over the MCP endpoint, `call_rest_api` against GitHub `/zen`, or `register(github_live)` followed by `call_registered_api(getZen)`, both return HTTP 200.
 - **Expected error behavior:** an unregistered API name returns an explicit error; a private-network URL is rejected by `assert_public_url` (SSRF guard).
 
